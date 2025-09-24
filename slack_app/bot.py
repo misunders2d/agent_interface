@@ -20,6 +20,8 @@ app = App(
     signing_secret=config.SLACK_SIGNING_SECRET
 )
 
+show_tools = False
+
 # --- Agent Query Logic ---
 def query_agent_and_reply(body, say):
     """
@@ -90,10 +92,10 @@ def query_agent_and_reply(body, say):
                             final_answer += part.get("text")
                         elif part.get("thought"):
                             thoughts.append(f"🧠 *Thought* ({event_author}): {part.get('text')}")
-                        elif part.get("function_call"):
+                        elif part.get("function_call") and show_tools:
                             fc = part.get("function_call")
                             thoughts.append(f"🔧 *Tool Call* ({event_author}): `{fc.get('name')}` with args: `{fc.get('args')}`")
-                        elif part.get("function_response"):
+                        elif part.get("function_response") and show_tools:
                             fr = part.get("function_response")
                             thoughts.append(f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`")
                 except json.JSONDecodeError:
