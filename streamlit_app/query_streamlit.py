@@ -2,7 +2,8 @@ import json
 import requests
 import time
 import streamlit as st
-from api_modules import get_or_create_session, ENDPOINT, get_identity_token
+import config
+from api_modules import get_or_create_session, get_identity_token
 
 
 # --- Query ---
@@ -11,7 +12,7 @@ def query_agent(
 ):
     session_id = get_or_create_session(user_id)
 
-    url = f"{ENDPOINT}:streamQuery?alt=sse"
+    url = f"{config.ENDPOINT}:streamQuery?alt=sse"
     headers = {
         "Authorization": f"Bearer {get_identity_token()}",
         "Content-Type": "application/json; charset=utf-8",

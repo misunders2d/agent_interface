@@ -1,19 +1,16 @@
-import streamlit as st
 import json
 import requests
 from google.oauth2 import service_account
 from google.auth.transport import requests as google_requests
-
-ENDPOINT = (
-    "https://us-central1-aiplatform.googleapis.com/v1/" + st.secrets["AGENT_ENGINE_ID"]
-)
-APP_NAME = st.secrets["APP_NAME"]
+import config
 
 
 # --- Auth ---
 def get_identity_token():
-    """Get identity token from Streamlit secrets (service account)."""
-    service_info = json.loads(st.secrets["GCP_SERVICE_ACCOUNT"])
+    """Get identity token from the GCP service account string."""
+    if not config.GCP_SERVICE_ACCOUNT_STRING:
+        raise ValueError("GCP_SERVICE_ACCOUNT environment variable not set.")
+    service_info = json.loads(config.GCP_SERVICE_ACCOUNT_STRING)
     credentials = service_account.Credentials.from_service_account_info(
         service_info,
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
@@ -25,7 +22,7 @@ def get_identity_token():
 
 # --- Session Management ---
 def list_sessions(user_id: str):
-    url = f"{ENDPOINT}:query"
+    url = f"{config.ENDPOINT}:query"
     headers = {
         "Authorization": f"Bearer {get_identity_token()}",
         "Content-Type": "application/json; charset=utf-8",
@@ -40,7 +37,7 @@ def list_sessions(user_id: str):
 
 
 def create_session(user_id: str) -> str:
-    url = f"{ENDPOINT}:query"
+    url = f"{config.ENDPOINT}:query"
     headers = {
         "Authorization": f"Bearer {get_identity_token()}",
         "Content-Type": "application/json; charset=utf-8",
@@ -63,7 +60,7 @@ def get_or_create_session(user_id: str) -> str:
 
 
 def get_session(user_id: str, session_id: str) -> dict:
-    url = f"{ENDPOINT}:query"
+    url = f"{config.ENDPOINT}:query"
     headers = {
         "Authorization": f"Bearer {get_identity_token()}",
         "Content-Type": "application/json; charset=utf-8",
@@ -79,7 +76,7 @@ def get_session(user_id: str, session_id: str) -> dict:
 
 
 def delete_session(user_id: str, session_id: str) -> dict:
-    url = f"{ENDPOINT}:query"
+    url = f"{config.ENDPOINT}:query"
     headers = {
         "Authorization": f"Bearer {get_identity_token()}",
         "Content-Type": "application/json; charset=utf-8",

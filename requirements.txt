@@ -1,5 +1,7 @@
 Authlib
-streamlit
 google
 google-auth-oauthlib
+python-dotenv
 requests
+slack-bolt
+streamlit

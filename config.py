@@ -7,6 +7,7 @@ load_dotenv()
 # --- Slack ---
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
+SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN")
 
 # --- Google Cloud ---
 GCP_SERVICE_ACCOUNT_STRING = os.getenv("GCP_SERVICE_ACCOUNT")

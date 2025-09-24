@@ -1,7 +1,14 @@
+import sys
+import os
 import streamlit as st
-from login import require_login
+
+# Add the project root to the Python path to allow importing shared modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import config
+from streamlit_app.login import require_login
 from api_modules import list_sessions, create_session
-from query_streamlit import query_agent
+from streamlit_app.query_streamlit import query_agent
 
 # === Config ===
 require_login()
