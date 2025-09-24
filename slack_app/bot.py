@@ -182,7 +182,7 @@ def handle_message_events(body, say, logger):
         thread.start()
         return
 
-    if channel_type == "channel":
+    if channel_type in ["channel", "group"]:
         logger.info("Received channel message, processing for context...")
         thread = threading.Thread(target=process_message_for_context, args=(body,))
         thread.start()
