@@ -1,5 +1,5 @@
 from vertexai import agent_engines
-from google.adk.events import Event#, EventActions
+from google.adk.events import Event  # , EventActions
 from google.adk.sessions import VertexAiSessionService
 from google.genai import types
 

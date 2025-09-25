@@ -27,7 +27,7 @@ USER_ID = (
 user_picture = (
     st.user.picture
     if st.user.picture and isinstance(st.user.picture, str)
-    else "media/user_avatar.jpg"
+    else "streamlit_app/media/user_avatar.jpg"
 )
 sessions = list_sessions(USER_ID)
 session_ids = [x["id"] for x in sessions]
@@ -67,7 +67,7 @@ for msg in st.session_state.messages:
     else:
         with st.chat_message(
             msg["role"],
-            avatar=(user_picture if msg["role"] == "user" else "media/haken.jpg"),
+            avatar=(user_picture if msg["role"] == "user" else "streamlit_app/media/haken.jpg"),
         ):
             st.markdown(msg["content"])
 
@@ -79,7 +79,7 @@ if prompt := st.chat_input("Type your message"):
         st.markdown(prompt)
 
     # Query agent
-    with st.chat_message("assistant", avatar="media/haken.jpg"):
+    with st.chat_message("assistant", avatar="streamlit_app/media/haken.jpg"):
         try:
             st.write_stream(
                 query_agent(

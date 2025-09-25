@@ -1,6 +1,6 @@
 import os
-import asyncio
 import json
+import asyncio
 import logging
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -43,14 +43,15 @@ async def query_agent_and_reply(body, say):
         display_name = profile.get("display_name", "")
         # real_name = profile.get("real_name", "")
 
-
     except Exception as e:
         logger.error(f"Error fetching user email: {e}")
         user_email = "unknown.email@example.com"
         display_name = "Unknown User"
 
     # Enrich the message with user info
-    enriched_message = f"Message from {display_name} {user_email} ({user_id}): {message_text}"
+    enriched_message = (
+        f"Message from {display_name} {user_email} ({user_id}): {message_text}"
+    )
 
     try:
         initial_reply = say(text="🧠 Thinking...", thread_ts=thread_ts)
@@ -71,34 +72,42 @@ async def query_agent_and_reply(body, say):
             session_id=session_id,
             message=enriched_message,
         ):
+            response_author = response.get("author")
+            logger.info("[EVENT]" + '-'*40 + '\n\n\n')
 
             if not response:
                 continue
             try:
-                response_author = response.get('author')
-
                 # Handle validator agent output
                 if response_author == "answer_validator_agent":
-                    validator_text = response.get("content", {}).get("parts", [{}])[0].get("text", "{}")
+                    validator_text = (
+                        response.get("content", {})
+                        .get("parts", [{}])[0]
+                        .get("text", "{}")
+                    )
                     thoughts.append(f"🕵️ *Validator Agent*: `{validator_text}`")
                     continue
 
                 # Handle other agents' output
-                parts = response.get('content',{}).get('parts', [])
-                for part in parts:
-                    if part.get('text','') and not part.get('thought',''):
-                        final_answer += part.get('text','')
-                    elif part.get('thought',''):
+                parts = response.get("content", {}).get("parts", [])
+                for i, part in enumerate(parts, start =1):
+                    logger.info(f"[PART{i}]" + '-' * 40)
+                    logger.info(f"{part} \n\n\n")
+                    if part.get("text") and not part.get("thought"):
+                        logger.info(f"logging part without thought: {part.get('text')}")
+                        final_answer += part.get("text")
+                    if part.get('text') and part.get("thought"):
+                        logger.info(f"logging part WITH thought: {part.get('text')}")
                         thoughts.append(
                             f"🧠 *Thought* ({response_author}): {part.get('text')}"
                         )
-                    elif part.get('function_call') and show_tools:
-                        fc = part.get('function_call')
+                    elif part.get("function_call") and show_tools:
+                        fc = part.get("function_call")
                         thoughts.append(
                             f"🔧 *Tool Call* ({response_author}): `{fc.get('name')}` with args: `{fc.get('args')}`"
                         )
-                    elif part.get('function_response') and show_tools:
-                        fr = part.get('function_response')
+                    elif part.get("function_response"):# and show_tools:
+                        fr = part.get("function_response")
                         thoughts.append(
                             f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`"
                         )
@@ -159,37 +168,23 @@ async def process_message_for_context(body):
         display_name = "Unknown User"
 
     # Enrich the message with user info
-    enriched_message = f"Message from {display_name} {user_email} ({user_id}): {message_text}"
+    enriched_message = (
+        f"Message from {display_name} {user_email} ({user_id}): {message_text}"
+    )
 
     try:
         session_id = await engine_modules.get_or_create_session(
             session_service=session_service, user_id=f"Slack: {session_id_for_channel}"
         )
-        
+
         await engine_modules.add_messages(
             session_service=session_service,
-            session_id = session_id,
-            user_id= f"Slack: {session_id_for_channel}",
-            author = display_name,
-            message = enriched_message
+            session_id=session_id,
+            user_id=f"Slack: {session_id_for_channel}",
+            author=display_name,
+            message=enriched_message,
         )
-        
-        # url = f"{config.ENDPOINT}:query"
-        # headers = {
-        #     "Authorization": f"Bearer {engine_modules.get_identity_token()}",
-        #     "Content-Type": "application/json; charset=utf-8",
-        # }
-        # request_body = {
-        #     "class_method": "async_query",
-        #     "input": {
-        #         "user_id": user_id,
-        #         "session_id": session_id,
-        #         "message": enriched_message,
-        #     },
-        # }
 
-        # resp = requests.post(url, headers=headers, data=json.dumps(request_body))
-        # resp.raise_for_status()
         logger.info(
             f"Processed message for context in channel {session_id_for_channel}"
         )
@@ -202,8 +197,6 @@ async def process_message_for_context(body):
 def handle_app_mention(body, say, ack):
     ack()
     asyncio.run(query_agent_and_reply(body, say))
-    # thread = threading.Thread(target=query_agent_and_reply, args=(body, say))
-    # thread.start()
 
 
 @app.event("message")
@@ -217,15 +210,11 @@ def handle_message_events(body, say, logger):
     if channel_type == "im":
         logger.info("Received DM, processing for reply...")
         asyncio.run(query_agent_and_reply(body, say))
-        # thread = threading.Thread(target=query_agent_and_reply, args=(body, say))
-        # thread.start()
         return
 
     if channel_type in ["channel", "group"]:
         logger.info("Received channel message, processing for context...")
         asyncio.run(process_message_for_context(body))
-        # thread = threading.Thread(target=process_message_for_context, args=(body,))
-        # thread.start()
         return
 
 
