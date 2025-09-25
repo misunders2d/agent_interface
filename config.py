@@ -5,16 +5,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Slack ---
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
-SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET")
-SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN")
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
+SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
+SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN", "")
 
 # --- Google Cloud ---
-GCP_SERVICE_ACCOUNT_STRING = os.getenv("GCP_SERVICE_ACCOUNT")
+GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "")
+GCP_SERVICE_ACCOUNT_STRING = os.getenv("GCP_SERVICE_ACCOUNT", "")
 
 # --- Agent Engine ---
-AGENT_ENGINE_ID = os.getenv("AGENT_ENGINE_ID")
-APP_NAME = os.getenv("APP_NAME")
+AGENT_ENGINE_ID = os.getenv("AGENT_ENGINE_ID", "")
+APP_NAME = os.getenv("APP_NAME", "")
 
 ENDPOINT = (
     f"https://us-central1-aiplatform.googleapis.com/v1/{AGENT_ENGINE_ID}"

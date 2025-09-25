@@ -1,29 +1,30 @@
 import os
-import threading
+import asyncio
 import json
 import logging
-import requests
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
 # --- Initialization ---
 import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-import api_modules
+import engine_modules
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-app = App(
-    token=config.SLACK_BOT_TOKEN,
-    signing_secret=config.SLACK_SIGNING_SECRET
-)
+app = App(token=config.SLACK_BOT_TOKEN, signing_secret=config.SLACK_SIGNING_SECRET)
+agent_app = engine_modules.get_remote_agent()
+session_service = engine_modules.get_session_service()
 
 show_tools = False
 
-# --- Agent Query Logic ---
-def query_agent_and_reply(body, say):
+
+async def query_agent_and_reply(body, say):
     """
     Queries the agent in a background thread and posts the response back to Slack.
     """
@@ -37,13 +38,19 @@ def query_agent_and_reply(body, say):
     try:
         # Fetch user email
         user_info = app.client.users_info(user=user_id)
-        user_email = user_info.get("user", {}).get("profile", {}).get("email", "unknown.email@example.com")
+        profile = user_info.get("user", {}).get("profile", {})
+        user_email = profile.get("email", "unknown.email@example.com")
+        display_name = profile.get("display_name", "")
+        # real_name = profile.get("real_name", "")
+
+
     except Exception as e:
         logger.error(f"Error fetching user email: {e}")
         user_email = "unknown.email@example.com"
+        display_name = "Unknown User"
 
     # Enrich the message with user info
-    enriched_message = f"Message from {user_email} ({user_id}): {message_text}"
+    enriched_message = f"Message from {display_name} {user_email} ({user_id}): {message_text}"
 
     try:
         initial_reply = say(text="🧠 Thinking...", thread_ts=thread_ts)
@@ -55,51 +62,50 @@ def query_agent_and_reply(body, say):
     final_answer = ""
     thoughts = []
     try:
-        session_id = api_modules.get_or_create_session(user_id)
-        url = f"{config.ENDPOINT}:streamQuery?alt=sse"
-        headers = {
-            "Authorization": f"Bearer {api_modules.get_identity_token()}",
-            "Content-Type": "application/json; charset=utf-8",
-        }
-        request_body = {
-            "class_method": "async_stream_query",
-            "input": {
-                "user_id": user_id,
-                "session_id": session_id,
-                "message": enriched_message,
-            },
-        }
+        session_id = await engine_modules.get_or_create_session(
+            session_service=session_service, user_id=f"Slack: {channel_id}"
+        )
 
-        with requests.post(url, headers=headers, data=json.dumps(request_body), stream=True) as resp:
-            resp.raise_for_status()
-            for chunk in resp.iter_lines():
-                if not chunk:
+        async for response in agent_app.async_stream_query(  # type: ignore
+            user_id=f"Slack: {channel_id}",
+            session_id=session_id,
+            message=enriched_message,
+        ):
+
+            if not response:
+                continue
+            try:
+                response_author = response.get('author')
+
+                # Handle validator agent output
+                if response_author == "answer_validator_agent":
+                    validator_text = response.get("content", {}).get("parts", [{}])[0].get("text", "{}")
+                    thoughts.append(f"🕵️ *Validator Agent*: `{validator_text}`")
                     continue
-                try:
-                    event_data = json.loads(chunk.decode("utf-8"))
-                    event_author = event_data.get("author", "")
 
-                    # Handle validator agent output
-                    if event_author == "answer_validator_agent":
-                        validator_text = event_data.get("content", {}).get("parts", [{}])[0].get("text", "{}")
-                        thoughts.append(f"🕵️ *Validator Agent*: `{validator_text}`")
-                        continue
-
-                    # Handle other agents' output
-                    parts = event_data.get("content", {}).get("parts", [])
-                    for part in parts:
-                        if part.get("text") and not part.get("thought"):
-                            final_answer += part.get("text")
-                        elif part.get("thought"):
-                            thoughts.append(f"🧠 *Thought* ({event_author}): {part.get('text')}")
-                        elif part.get("function_call") and show_tools:
-                            fc = part.get("function_call")
-                            thoughts.append(f"🔧 *Tool Call* ({event_author}): `{fc.get('name')}` with args: `{fc.get('args')}`")
-                        elif part.get("function_response") and show_tools:
-                            fr = part.get("function_response")
-                            thoughts.append(f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`")
-                except json.JSONDecodeError:
-                    continue
+                # Handle other agents' output
+                parts = response.get('content',{}).get('parts', [])
+                for part in parts:
+                    if part.get('text','') and not part.get('thought',''):
+                        final_answer += part.get('text','')
+                    elif part.get('thought',''):
+                        thoughts.append(
+                            f"🧠 *Thought* ({response_author}): {part.get('text')}"
+                        )
+                    elif part.get('function_call') and show_tools:
+                        fc = part.get('function_call')
+                        thoughts.append(
+                            f"🔧 *Tool Call* ({response_author}): `{fc.get('name')}` with args: `{fc.get('args')}`"
+                        )
+                    elif part.get('function_response') and show_tools:
+                        fr = part.get('function_response')
+                        thoughts.append(
+                            f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`"
+                        )
+            except json.JSONDecodeError as e:
+                final_answer += f"Ran into JSON decoding issue: {str(e)}"
+            except Exception as e:
+                final_answer += f"Ran into an unexpected issue: {str(e)}"
 
     except Exception as e:
         final_answer = f"Sorry, an error occurred: {e}"
@@ -116,14 +122,21 @@ def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
-        app.client.chat_update(channel=channel_id, ts=reply_ts, text=final_answer)
+        app.client.chat_update(
+            channel=channel_id, ts=reply_ts, text=final_answer or "no response needed"
+        )
         if thoughts:
             thought_text = "\n".join(thoughts)
-            app.client.chat_postMessage(channel=channel_id, thread_ts=reply_ts, text=f"*My thought process:*\n{thought_text}")
+            app.client.chat_postMessage(
+                channel=channel_id,
+                thread_ts=reply_ts,
+                text=f"*My thought process:*\n{thought_text}",
+            )
     except Exception as e:
         logger.error(f"Error updating message or posting thoughts: {e}")
 
-def process_message_for_context(body):
+
+async def process_message_for_context(body):
     """
     Silently sends a message to the agent engine for context-building.
     """
@@ -135,38 +148,63 @@ def process_message_for_context(body):
     try:
         # Fetch user email
         user_info = app.client.users_info(user=user_id)
-        user_email = user_info.get("user", {}).get("profile", {}).get("email", "unknown.email@example.com")
+        profile = user_info.get("user", {}).get("profile", {})
+        user_email = profile.get("email", "unknown.email@example.com")
+        display_name = profile.get("display_name", "")
+        # real_name = profile.get("real_name", "")
+
     except Exception as e:
         logger.error(f"Error fetching user email: {e}")
         user_email = "unknown.email@example.com"
+        display_name = "Unknown User"
 
     # Enrich the message with user info
-    enriched_message = f"Message from {user_email} ({user_id}): {message_text}"
+    enriched_message = f"Message from {display_name} {user_email} ({user_id}): {message_text}"
 
     try:
-        session_id = api_modules.get_or_create_session(session_id_for_channel)
-        url = f"{config.ENDPOINT}:query"
-        headers = {
-            "Authorization": f"Bearer {api_modules.get_identity_token()}",
-            "Content-Type": "application/json; charset=utf-8",
-        }
-        request_body = {
-            "class_method": "async_query",
-            "input": {"user_id": user_id, "session_id": session_id, "message": enriched_message},
-        }
+        session_id = await engine_modules.get_or_create_session(
+            session_service=session_service, user_id=f"Slack: {session_id_for_channel}"
+        )
+        
+        await engine_modules.add_messages(
+            session_service=session_service,
+            session_id = session_id,
+            user_id= f"Slack: {session_id_for_channel}",
+            author = display_name,
+            message = enriched_message
+        )
+        
+        # url = f"{config.ENDPOINT}:query"
+        # headers = {
+        #     "Authorization": f"Bearer {engine_modules.get_identity_token()}",
+        #     "Content-Type": "application/json; charset=utf-8",
+        # }
+        # request_body = {
+        #     "class_method": "async_query",
+        #     "input": {
+        #         "user_id": user_id,
+        #         "session_id": session_id,
+        #         "message": enriched_message,
+        #     },
+        # }
 
-        resp = requests.post(url, headers=headers, data=json.dumps(request_body))
-        resp.raise_for_status()
-        logger.info(f"Processed message for context in channel {session_id_for_channel}")
+        # resp = requests.post(url, headers=headers, data=json.dumps(request_body))
+        # resp.raise_for_status()
+        logger.info(
+            f"Processed message for context in channel {session_id_for_channel}"
+        )
     except Exception as e:
         logger.error(f"Error processing message for context: {e}")
+
 
 # --- Slack Event Handlers ---
 @app.event("app_mention")
 def handle_app_mention(body, say, ack):
     ack()
-    thread = threading.Thread(target=query_agent_and_reply, args=(body, say))
-    thread.start()
+    asyncio.run(query_agent_and_reply(body, say))
+    # thread = threading.Thread(target=query_agent_and_reply, args=(body, say))
+    # thread.start()
+
 
 @app.event("message")
 def handle_message_events(body, say, logger):
@@ -178,15 +216,18 @@ def handle_message_events(body, say, logger):
     channel_type = event.get("channel_type")
     if channel_type == "im":
         logger.info("Received DM, processing for reply...")
-        thread = threading.Thread(target=query_agent_and_reply, args=(body, say))
-        thread.start()
+        asyncio.run(query_agent_and_reply(body, say))
+        # thread = threading.Thread(target=query_agent_and_reply, args=(body, say))
+        # thread.start()
         return
 
     if channel_type in ["channel", "group"]:
         logger.info("Received channel message, processing for context...")
-        thread = threading.Thread(target=process_message_for_context, args=(body,))
-        thread.start()
+        asyncio.run(process_message_for_context(body))
+        # thread = threading.Thread(target=process_message_for_context, args=(body,))
+        # thread.start()
         return
+
 
 # --- App Start ---
 if __name__ == "__main__":

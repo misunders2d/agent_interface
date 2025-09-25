@@ -1,6 +1,7 @@
 Authlib
 google
 google-auth-oauthlib
+google-cloud-aiplatform[adk,agent_engines]
 python-dotenv
 requests
 slack-bolt

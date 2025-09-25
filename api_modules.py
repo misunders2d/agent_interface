@@ -90,5 +90,6 @@ def delete_session(user_id: str, session_id: str) -> dict:
     data = resp.json()
     return data
 
+
 def list_messages(session):
     pass

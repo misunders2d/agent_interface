@@ -13,9 +13,11 @@ from streamlit_app.query_streamlit import query_agent
 # === Config ===
 require_login()
 
+
 def run_session_creation(user_id):
     new_session = create_session(user_id)
-    st.toast(f'New session created: {new_session}')
+    st.toast(f"New session created: {new_session}")
+
 
 USER_ID = (
     st.user.email
@@ -28,11 +30,16 @@ user_picture = (
     else "media/user_avatar.jpg"
 )
 sessions = list_sessions(USER_ID)
-session_ids = [x['id'] for x in sessions]
+session_ids = [x["id"] for x in sessions]
 with st.sidebar:
-    create_chat_col, delete_chat_col = st.columns([1,1])
-    new_chat = create_chat_col.button('Start new chat', on_click=run_session_creation, kwargs={"user_id":USER_ID}, type='tertiary')
-    delete_chat = delete_chat_col.button("Delete chat", type='tertiary')
+    create_chat_col, delete_chat_col = st.columns([1, 1])
+    new_chat = create_chat_col.button(
+        "Start new chat",
+        on_click=run_session_creation,
+        kwargs={"user_id": USER_ID},
+        type="tertiary",
+    )
+    delete_chat = delete_chat_col.button("Delete chat", type="tertiary")
     show_tool_calls = st.checkbox("Show tool calls", value=False)
     show_thoughts = st.checkbox("Show thoughts", value=False)
     sessions_list = st.selectbox("Sessions", session_ids)
