@@ -135,18 +135,24 @@ async def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
+        # if thoughts:
+        #     thought_text = "\n".join(thoughts)
+        #     app.client.chat_postMessage(
+        #         channel=channel_id,
+        #         thread_ts=reply_ts,
+        #         text=f"*My thought process:*\n\n{thought_text}",
+        #     )
         chunks = [final_answer[i:i+3900] for i in range(0, len(final_answer), 3900)]
-        for chunk in chunks:
-            app.client.chat_update(
-                channel=channel_id, ts=reply_ts, text=chunk
-            )
-        if thoughts:
-            thought_text = "\n".join(thoughts)
-            app.client.chat_postMessage(
-                channel=channel_id,
-                thread_ts=reply_ts,
-                text=f"*My thought process:*\n{thought_text}",
-            )
+        # Send the first chunk as an update to the initial reply
+        app.client.chat_update(
+            channel=channel_id, ts=reply_ts, text=chunks[0]
+        )
+        # Send any remaining chunks as new messages in the same thread
+        if len(chunks)>1:
+            for chunk in chunks[1:]:
+                app.client.chat_postMessage(
+                channel=channel_id, thread_ts=reply_ts, text=chunk
+                )
     except Exception as e:
         logger.error(f"Error updating message or posting thoughts: {e}")
 
