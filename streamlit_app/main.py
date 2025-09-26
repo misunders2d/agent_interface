@@ -67,7 +67,11 @@ for msg in st.session_state.messages:
     else:
         with st.chat_message(
             msg["role"],
-            avatar=(user_picture if msg["role"] == "user" else "streamlit_app/media/haken.jpg"),
+            avatar=(
+                user_picture
+                if msg["role"] == "user"
+                else "streamlit_app/media/haken.jpg"
+            ),
         ):
             st.markdown(msg["content"])
 

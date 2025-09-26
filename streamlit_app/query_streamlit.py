@@ -80,8 +80,8 @@ def query_agent(
                     thought_data = {
                         "role": "thought",
                         "type": "tool_call",
-                        "label": fc.get('name'),
-                        "content": fc.get('args'),
+                        "label": fc.get("name"),
+                        "content": fc.get("args"),
                     }
                     st.session_state.messages.append(thought_data)
                     with st.expander(thought_data["label"], icon="🔧"):
@@ -93,7 +93,7 @@ def query_agent(
                     thought_data = {
                         "role": "thought",
                         "type": "tool_response",
-                        "label": fr.get('name'),
+                        "label": fr.get("name"),
                         "content": fr.get("response"),
                     }
                     st.session_state.messages.append(thought_data)

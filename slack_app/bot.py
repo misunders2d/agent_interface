@@ -66,14 +66,14 @@ async def query_agent_and_reply(body, say):
         session_id = await engine_modules.get_or_create_session(
             session_service=session_service, user_id=f"Slack: {channel_id}"
         )
-
         async for response in agent_app.async_stream_query(  # type: ignore
             user_id=f"Slack: {channel_id}",
             session_id=session_id,
             message=enriched_message,
         ):
             response_author = response.get("author")
-            logger.info("[EVENT]" + '-'*40 + '\n\n\n')
+            logger.info("[EVENT]" + "-" * 40)
+            logger.info(response)
 
             if not response:
                 continue
@@ -111,6 +111,10 @@ async def query_agent_and_reply(body, say):
                         thoughts.append(
                             f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`"
                         )
+                        try:
+                            final_answer += json.dumps(fr.get('response'))
+                        except Exception as e:
+                            logger.info(f'final answer issue: {e}')
             except json.JSONDecodeError as e:
                 final_answer += f"Ran into JSON decoding issue: {str(e)}"
             except Exception as e:
