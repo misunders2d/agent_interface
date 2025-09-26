@@ -72,8 +72,8 @@ async def query_agent_and_reply(body, say):
             message=enriched_message,
         ):
             response_author = response.get("author")
-            logger.info("[EVENT]" + "-" * 40)
-            logger.info(response)
+            # logger.info("[EVENT]" + "-" * 40)
+            # logger.info(response)
 
             if not response:
                 continue
@@ -91,13 +91,13 @@ async def query_agent_and_reply(body, say):
                 # Handle other agents' output
                 parts = response.get("content", {}).get("parts", [])
                 for i, part in enumerate(parts, start =1):
-                    logger.info(f"[PART{i}]" + '-' * 40)
-                    logger.info(f"{part} \n\n\n")
+                    # logger.info(f"[PART{i}]" + '-' * 40)
+                    # logger.info(f"{part} \n\n\n")
                     if part.get("text") and not part.get("thought"):
-                        logger.info(f"logging part without thought: {part.get('text')}")
+                        # logger.info(f"logging part without thought: {part.get('text')}")
                         final_answer += part.get("text")
                     if part.get('text') and part.get("thought"):
-                        logger.info(f"logging part WITH thought: {part.get('text')}")
+                        # logger.info(f"logging part WITH thought: {part.get('text')}")
                         thoughts.append(
                             f"🧠 *Thought* ({response_author}): {part.get('text')}"
                         )
