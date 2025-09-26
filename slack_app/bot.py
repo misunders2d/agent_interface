@@ -116,9 +116,9 @@ async def query_agent_and_reply(body, say):
                         except Exception as e:
                             logger.info(f'final answer issue: {e}')
             except json.JSONDecodeError as e:
-                final_answer += f"Ran into JSON decoding issue: {str(e)}"
+                thoughts.append(f"ERROR: Ran into JSON decoding issue: {str(e)}")
             except Exception as e:
-                final_answer += f"Ran into an unexpected issue: {str(e)}"
+                thoughts.append(f"ERROR: Ran into an unexpected issue: {str(e)}")
 
     except Exception as e:
         final_answer = f"Sorry, an error occurred: {e}"
@@ -135,9 +135,11 @@ async def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
-        app.client.chat_update(
-            channel=channel_id, ts=reply_ts, text=final_answer or "no response needed"
-        )
+        chunks = [final_answer[i:i+3900] for i in range(0, len(final_answer), 3900)]
+        for chunk in chunks:
+            app.client.chat_update(
+                channel=channel_id, ts=reply_ts, text=chunk
+            )
         if thoughts:
             thought_text = "\n".join(thoughts)
             app.client.chat_postMessage(
