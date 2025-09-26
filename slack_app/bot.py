@@ -90,7 +90,7 @@ async def query_agent_and_reply(body, say):
 
                 # Handle other agents' output
                 parts = response.get("content", {}).get("parts", [])
-                for i, part in enumerate(parts, start =1):
+                for part in parts:
                     # logger.info(f"[PART{i}]" + '-' * 40)
                     # logger.info(f"{part} \n\n\n")
                     if part.get("text") and not part.get("thought"):
@@ -111,10 +111,10 @@ async def query_agent_and_reply(body, say):
                         thoughts.append(
                             f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`"
                         )
-                        try:
-                            final_answer += json.dumps(fr.get('response'))
-                        except Exception as e:
-                            logger.info(f'final answer issue: {e}')
+                        # try:
+                        #     final_answer += json.dumps(fr.get('response'))
+                        # except Exception as e:
+                        #     logger.info(f'final answer issue: {e}')
             except json.JSONDecodeError as e:
                 thoughts.append(f"ERROR: Ran into JSON decoding issue: {str(e)}")
             except Exception as e:
@@ -135,13 +135,14 @@ async def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
-        # if thoughts:
-        #     thought_text = "\n".join(thoughts)
-        #     app.client.chat_postMessage(
-        #         channel=channel_id,
-        #         thread_ts=reply_ts,
-        #         text=f"*My thought process:*\n\n{thought_text}",
-        #     )
+        if thoughts:
+            # thought_text = "\n".join(thoughts)
+            for thought in thoughts:
+                app.client.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=reply_ts,
+                    text=f"*My thought process:*\n\n{thought}",
+                )
         chunks = [final_answer[i:i+3900] for i in range(0, len(final_answer), 3900)]
         # Send the first chunk as an update to the initial reply
         app.client.chat_update(
