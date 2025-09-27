@@ -2,6 +2,8 @@ import os
 import json
 import asyncio
 import logging
+from google.genai import types
+
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
@@ -73,10 +75,11 @@ async def query_agent_and_reply(body, say):
         session_id = await engine_modules.get_or_create_session(
             session_service=session_service, user_id=f"Slack: {channel_display_name}"
         )
+        text_part = types.Part.from_text(text=enriched_message)
         async for response in agent_app.async_stream_query(  # type: ignore
             user_id=f"Slack: {channel_display_name}",
             session_id=session_id,
-            message=enriched_message,
+            message=text_part,
         ):
             response_author = response.get("author")
             # logger.info("[EVENT]" + "-" * 40)
@@ -163,14 +166,6 @@ async def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
-        # if thoughts:
-        # thought_text = "\n".join(thoughts)
-        # for thought in thoughts:
-        #     app.client.chat_postMessage(
-        #         channel=channel_id,
-        #         thread_ts=reply_ts,
-        #         text=thought,
-        #     )
         chunks = [final_answer[i : i + 3900] for i in range(0, len(final_answer), 3900)]
         # Send the first chunk as an update to the initial reply
         app.client.chat_update(channel=channel_id, ts=reply_ts, text=chunks[0])
