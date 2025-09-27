@@ -156,7 +156,7 @@ async def run_query(user_id, session_id):
 if __name__ == "__main__":
     import asyncio
 
-    import pickle
+    # import pickle
     agent_app = get_remote_agent()
     user_id = "Slack: D07LHACUY6R"
     session_service = get_session_service()
