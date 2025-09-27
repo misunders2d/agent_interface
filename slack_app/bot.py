@@ -79,7 +79,7 @@ async def query_agent_and_reply(body, say):
         async for response in agent_app.async_stream_query(  # type: ignore
             user_id=f"Slack: {channel_display_name}",
             session_id=session_id,
-            message=text_part,
+            message=[text_part],
         ):
             response_author = response.get("author")
             # logger.info("[EVENT]" + "-" * 40)
