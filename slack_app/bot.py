@@ -42,7 +42,7 @@ async def query_agent_and_reply(body, say):
     except Exception as e:
         logger.error(f"Error fetching channel display name: {e}")
         channel_display_name = channel_id
-
+    session_user_id = f"Slack: {channel_display_name}"
     try:
         # Fetch user email
         user_info = app.client.users_info(user=user_id)
@@ -72,16 +72,26 @@ async def query_agent_and_reply(body, say):
     thoughts = []
     try:
         session_id = await engine_modules.get_or_create_session(
-            session_service=session_service, user_id=f"Slack: {channel_display_name}"
+            session_service=session_service, user_id=session_user_id
         )
-        async for response in agent_app.async_stream_query(  # type: ignore
-            user_id=f"Slack: {channel_display_name}",
+        
+        # change user_id temporarily to the message's user email for personal memories access
+        await engine_modules.change_state(
+            session_service=session_service,
             session_id=session_id,
-            message=enriched_message
+            user_id=session_user_id,
+            state_delta={"user_id": user_email},
+        )
+
+        async for response in agent_app.async_stream_query(  # type: ignore
+            user_id=session_user_id,
+            session_id=session_id,
+            message=enriched_message,
         ):
             response_author = response.get("author")
-            # logger.info("[EVENT]" + "-" * 40)
-            # logger.info(response)
+            logger.info("[EVENT]" + "-" * 40)
+            logger.info(response)
+            logger.info("\n\n\n")
 
             if not response:
                 continue
@@ -149,6 +159,14 @@ async def query_agent_and_reply(body, say):
                     text=f"ERROR: Ran into an unexpected issue: {str(e)}",
                 )
 
+        # change user_id back to channel id to prevent personal memories access
+        await engine_modules.change_state(
+            session_service=session_service,
+            session_id=session_id,
+            user_id=session_user_id,
+            state_delta={"user_id": user_id},
+        )
+
     except Exception as e:
         final_answer = f"Sorry, an error occurred: {e}"
         logger.error(final_answer)
@@ -185,6 +203,7 @@ async def process_message_for_context(body):
     session_id_for_channel = event["channel"]
     user_id = event["user"]
     message_text = event["text"]
+    channel_id = event["channel"]
 
     try:
         # Fetch user email
@@ -198,6 +217,14 @@ async def process_message_for_context(body):
         logger.error(f"Error fetching user email: {e}")
         user_email = "unknown.email@example.com"
         display_name = "Unknown User"
+    try:
+        channel_info = app.client.conversations_info(channel=channel_id)
+        channel_display_name = channel_info.get("channel", {}).get("name", channel_id)
+    except Exception as e:
+        logger.error(f"Error fetching channel display name: {e}")
+        channel_display_name = channel_id
+
+    session_user_id = f"Slack: {channel_display_name}"
 
     # Enrich the message with user info
     enriched_message = (
@@ -206,13 +233,13 @@ async def process_message_for_context(body):
 
     try:
         session_id = await engine_modules.get_or_create_session(
-            session_service=session_service, user_id=f"Slack: {session_id_for_channel}"
+            session_service=session_service, user_id=session_user_id
         )
 
         await engine_modules.add_messages(
             session_service=session_service,
             session_id=session_id,
-            user_id=f"Slack: {session_id_for_channel}",
+            user_id=session_user_id,
             author=display_name,
             message=enriched_message,
         )
@@ -248,6 +275,11 @@ def handle_message_events(body, say, logger):
         logger.info("Received channel message, processing for context...")
         asyncio.run(process_message_for_context(body))
         return
+
+
+@app.event("reaction_added")
+def handle_reaction_added_events(body, logger):
+    logger.info(f"REACTION NEEDED: {body}")
 
 
 # --- App Start ---

@@ -1,5 +1,5 @@
 from vertexai import agent_engines
-from google.adk.events import Event
+from google.adk.events import Event, EventActions
 from google.adk.sessions import VertexAiSessionService, Session
 from google.genai import types
 
@@ -95,6 +95,23 @@ async def delete_session(
     )
 
 
+async def change_state(
+    session_service: VertexAiSessionService, session_id, user_id, state_delta
+):
+    session = await get_session(
+        session_service=session_service, user_id=user_id, session_id=session_id
+    )
+    if session:
+        actions = EventActions(state_delta=state_delta)
+        event = Event(
+            actions=actions,
+            author="system",
+            invocation_id=f"invocation_{uuid.uuid4()}",
+            id=f"id_{uuid.uuid4()}",
+        )
+        await session_service.append_event(session=session, event=event)
+
+
 async def add_messages(
     session_service: VertexAiSessionService, session_id, user_id, author, message
 ):
@@ -139,11 +156,11 @@ async def run_query(user_id, session_id):
 if __name__ == "__main__":
     import asyncio
 
-    # import pickle
+    import pickle
     agent_app = get_remote_agent()
     user_id = "Slack: D07LHACUY6R"
     session_service = get_session_service()
-    session_id = '3332271748358864896'
+    session_id = "5911989909912027136"
     # session_id = asyncio.run(
     #     get_or_create_session(
     #         session_service,
@@ -151,7 +168,11 @@ if __name__ == "__main__":
     #     )
     # )
     # session_id = asyncio.run(create_session(session_service, user_id, session_id = None))
-    session = asyncio.run(get_session(session_service=session_service, user_id=user_id, session_id=session_id))
+    session = asyncio.run(
+        get_session(
+            session_service=session_service, user_id=user_id, session_id=session_id
+        )
+    )
     print(session)
     # with open('session.pkl', 'wb') as file:
     #     pickle.dump(session, file)
