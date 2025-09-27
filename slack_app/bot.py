@@ -75,7 +75,7 @@ async def query_agent_and_reply(body, say):
         session_id = await engine_modules.get_or_create_session(
             session_service=session_service, user_id=f"Slack: {channel_display_name}"
         )
-        text_part = types.Part.from_text(text=enriched_message)
+        text_part = types.Part(text=enriched_message)
         async for response in agent_app.async_stream_query(  # type: ignore
             user_id=f"Slack: {channel_display_name}",
             session_id=session_id,
