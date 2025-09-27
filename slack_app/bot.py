@@ -34,6 +34,13 @@ async def query_agent_and_reply(body, say):
     channel_id = event["channel"]
     # Only reply in a thread if the original message was in a thread
     thread_ts = event.get("thread_ts")
+    # Fetch channel display name
+    try:
+        channel_info = app.client.conversations_info(channel=channel_id)
+        channel_display_name = channel_info.get("channel", {}).get("name", channel_id)
+    except Exception as e:
+        logger.error(f"Error fetching channel display name: {e}")
+        channel_display_name = channel_id
 
     try:
         # Fetch user email
@@ -64,10 +71,10 @@ async def query_agent_and_reply(body, say):
     thoughts = []
     try:
         session_id = await engine_modules.get_or_create_session(
-            session_service=session_service, user_id=f"Slack: {channel_id}"
+            session_service=session_service, user_id=f"Slack: {channel_display_name}"
         )
         async for response in agent_app.async_stream_query(  # type: ignore
-            user_id=f"Slack: {channel_id}",
+            user_id=f"Slack: {channel_display_name}",
             session_id=session_id,
             message=enriched_message,
         ):
@@ -80,12 +87,12 @@ async def query_agent_and_reply(body, say):
             try:
                 # Handle validator agent output
                 if response_author == "answer_validator_agent":
-                    validator_text = (
-                        response.get("content", {})
-                        .get("parts", [{}])[0]
-                        .get("text", "{}")
-                    )
-                    thoughts.append(f"🕵️ *Validator Agent*: `{validator_text}`")
+                    # validator_text = (
+                    #     response.get("content", {})
+                    #     .get("parts", [{}])[0]
+                    #     .get("text", "{}")
+                    # )
+                    # thoughts.append(f"🕵️ *Validator Agent*: `{validator_text}`")
                     continue
 
                 # Handle other agents' output
@@ -96,29 +103,50 @@ async def query_agent_and_reply(body, say):
                     if part.get("text") and not part.get("thought"):
                         # logger.info(f"logging part without thought: {part.get('text')}")
                         final_answer += part.get("text")
-                    if part.get('text') and part.get("thought"):
+                    if part.get("text") and part.get("thought"):
                         # logger.info(f"logging part WITH thought: {part.get('text')}")
-                        thoughts.append(
+                        thought = (
                             f"🧠 *Thought* ({response_author}): {part.get('text')}"
                         )
-                    elif part.get("function_call") and show_tools:
+                        thoughts.append(thought)
+                        app.client.chat_postMessage(
+                            channel=channel_id,
+                            thread_ts=reply_ts,
+                            text=thought,
+                        )
+
+                    elif part.get("function_call"):
                         fc = part.get("function_call")
-                        thoughts.append(
-                            f"🔧 *Tool Call* ({response_author}): `{fc.get('name')}` with args: `{fc.get('args')}`"
-                        )
-                    elif part.get("function_response"):# and show_tools:
+                        thought = f"🔧 *Tool Call* ({response_author}): `{fc.get('name')}` with args: `{fc.get('args')}`"
+                        thoughts.append(thought)
+                        if show_tools:
+                            app.client.chat_postMessage(
+                                channel=channel_id,
+                                thread_ts=reply_ts,
+                                text=thought,
+                            )
+                    elif part.get("function_response"):
                         fr = part.get("function_response")
-                        thoughts.append(
-                            f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`"
-                        )
-                        # try:
-                        #     final_answer += json.dumps(fr.get('response'))
-                        # except Exception as e:
-                        #     logger.info(f'final answer issue: {e}')
+                        thought = f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`"
+                        thoughts.append(thought)
+                        if show_tools:
+                            app.client.chat_postMessage(
+                                channel=channel_id,
+                                thread_ts=reply_ts,
+                                text=thought,
+                            )
             except json.JSONDecodeError as e:
-                thoughts.append(f"ERROR: Ran into JSON decoding issue: {str(e)}")
+                app.client.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=reply_ts,
+                    text=f"ERROR: Ran into JSON decoding issue: {str(e)}",
+                )
             except Exception as e:
-                thoughts.append(f"ERROR: Ran into an unexpected issue: {str(e)}")
+                app.client.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=reply_ts,
+                    text=f"ERROR: Ran into an unexpected issue: {str(e)}",
+                )
 
     except Exception as e:
         final_answer = f"Sorry, an error occurred: {e}"
@@ -135,24 +163,22 @@ async def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
-        if thoughts:
-            # thought_text = "\n".join(thoughts)
-            for thought in thoughts:
-                app.client.chat_postMessage(
-                    channel=channel_id,
-                    thread_ts=reply_ts,
-                    text=f"*My thought process:*\n\n{thought}",
-                )
-        chunks = [final_answer[i:i+3900] for i in range(0, len(final_answer), 3900)]
+        # if thoughts:
+        # thought_text = "\n".join(thoughts)
+        # for thought in thoughts:
+        #     app.client.chat_postMessage(
+        #         channel=channel_id,
+        #         thread_ts=reply_ts,
+        #         text=thought,
+        #     )
+        chunks = [final_answer[i : i + 3900] for i in range(0, len(final_answer), 3900)]
         # Send the first chunk as an update to the initial reply
-        app.client.chat_update(
-            channel=channel_id, ts=reply_ts, text=chunks[0]
-        )
+        app.client.chat_update(channel=channel_id, ts=reply_ts, text=chunks[0])
         # Send any remaining chunks as new messages in the same thread
-        if len(chunks)>1:
+        if len(chunks) > 1:
             for chunk in chunks[1:]:
                 app.client.chat_postMessage(
-                channel=channel_id, thread_ts=reply_ts, text=chunk
+                    channel=channel_id, thread_ts=reply_ts, text=chunk
                 )
     except Exception as e:
         logger.error(f"Error updating message or posting thoughts: {e}")

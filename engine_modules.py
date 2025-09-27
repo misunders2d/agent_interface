@@ -107,25 +107,28 @@ async def add_messages(
             content=types.Content(parts=[part], role="user"),
             author=author,
             invocation_id=f"invocation_{uuid.uuid4()}",
-            id=f'id_{uuid.uuid4()}'
+            id=f"id_{uuid.uuid4()}",
         )
         await session_service.append_event(session=session, event=event)
 
 
 async def list_messages(session_service: VertexAiSessionService, session_id, user_id):
-    session = await get_session(session_service=session_service, session_id=session_id, user_id=user_id)
+    session = await get_session(
+        session_service=session_service, session_id=session_id, user_id=user_id
+    )
     if session:
         for event in session.events:
             ts = event.timestamp
             date = datetime.datetime.fromtimestamp(ts)
-            
+
             if event.content and event.content.parts:
                 text = [x.text for x in event.content.parts]
                 if text:
-                    print(f'{date.isoformat()}: {text}', end = '\n\n')
+                    print(f"{date.isoformat()}: {text}", end="\n\n")
+
 
 async def run_query(user_id, session_id):
-    async for event in agent_app.async_stream_query( # type: ignore
+    async for event in agent_app.async_stream_query(  # type: ignore
         user_id=user_id,
         session_id=session_id,
         message="""List all messages here including this one. Don't use memory agents, don't list agent messages. Don't overthink this or pass to any agents, I'm simply testing whether you can see the context and history.""",
@@ -135,41 +138,45 @@ async def run_query(user_id, session_id):
 
 if __name__ == "__main__":
     import asyncio
+
     # import pickle
     agent_app = get_remote_agent()
-    user_id = "test_user"
+    user_id = "Slack: D07LHACUY6R"
     session_service = get_session_service()
-    # session_id = 'test_user_session'
-    session_id = asyncio.run(
-        get_or_create_session(
-            session_service,
-            user_id=user_id,
-        )
-    )
+    session_id = '3332271748358864896'
+    # session_id = asyncio.run(
+    #     get_or_create_session(
+    #         session_service,
+    #         user_id=user_id,
+    #     )
+    # )
     # session_id = asyncio.run(create_session(session_service, user_id, session_id = None))
-    # session = asyncio.run(get_session(session_service=session_service, user_id=user_id, session_id=session_id))
-    # print(session)
+    session = asyncio.run(get_session(session_service=session_service, user_id=user_id, session_id=session_id))
+    print(session)
     # with open('session.pkl', 'wb') as file:
     #     pickle.dump(session, file)
     # print(session)
-    
-    
-    asyncio.run(add_messages(
-        session_service,
-        session_id,
-        user_id,
-        author="sergey demchenko",
-        message="First test message from outside of the flow",
-        # timestamp=datetime.datetime.now().timestamp()
-    ))
-    print('Message added', end = '\n\n\n')
-    asyncio.run(add_messages(
-        session_service,
-        session_id,
-        user_id,
-        author="Vladimir Barabulia",
-        message="and another test message from outside of the flow",
-        # timestamp=datetime.datetime.now().timestamp()
-    ))
-    print('Message added', end = '\n\n\n')
-    asyncio.run(run_query(user_id, session_id))
+
+    # asyncio.run(
+    #     add_messages(
+    #         session_service,
+    #         session_id,
+    #         user_id,
+    #         author="sergey demchenko",
+    #         message="First test message from outside of the flow",
+    #         # timestamp=datetime.datetime.now().timestamp()
+    #     )
+    # )
+    # print("Message added", end="\n\n\n")
+    # asyncio.run(
+    #     add_messages(
+    #         session_service,
+    #         session_id,
+    #         user_id,
+    #         author="Vladimir Barabulia",
+    #         message="and another test message from outside of the flow",
+    #         # timestamp=datetime.datetime.now().timestamp()
+    #     )
+    # )
+    # print("Message added", end="\n\n\n")
+    # asyncio.run(run_query(user_id, session_id))
