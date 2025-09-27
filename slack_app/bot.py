@@ -69,12 +69,13 @@ async def query_agent_and_reply(body, say):
         return
 
     final_answer = ""
+    last_text = ""
     thoughts = []
     try:
         session_id = await engine_modules.get_or_create_session(
             session_service=session_service, user_id=session_user_id
         )
-        
+
         # change user_id temporarily to the message's user email for personal memories access
         await engine_modules.change_state(
             session_service=session_service,
@@ -125,6 +126,7 @@ async def query_agent_and_reply(body, say):
                             thread_ts=reply_ts,
                             text=thought,
                         )
+                        last_text = thought
 
                     elif part.get("function_call"):
                         fc = part.get("function_call")
@@ -136,6 +138,8 @@ async def query_agent_and_reply(body, say):
                                 thread_ts=reply_ts,
                                 text=thought,
                             )
+                        last_text = thought
+
                     elif part.get("function_response"):
                         fr = part.get("function_response")
                         thought = f"📥 *Tool Response* for `{fr.get('name')}`: `{fr.get('response')}`"
@@ -146,6 +150,8 @@ async def query_agent_and_reply(body, say):
                                 thread_ts=reply_ts,
                                 text=thought,
                             )
+                        last_text = thought
+
             except json.JSONDecodeError as e:
                 app.client.chat_postMessage(
                     channel=channel_id,
@@ -172,7 +178,7 @@ async def query_agent_and_reply(body, say):
         logger.error(final_answer)
 
     # If there's no final answer, delete the 'Thinking...' message and stop.
-    if not final_answer:
+    if not final_answer and not last_text:
         logger.info("Agent provided no final answer. Deleting 'Thinking...' message.")
         try:
             app.client.chat_delete(channel=channel_id, ts=reply_ts)
@@ -182,11 +188,15 @@ async def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
-        chunks = [final_answer[i : i + 3900] for i in range(0, len(final_answer), 3900)]
+        post_message = final_answer or last_text
+        chunks = [post_message[i : i + 3900] for i in range(0, len(post_message), 3900)]
         # Send the first chunk as an update to the initial reply
         app.client.chat_update(channel=channel_id, ts=reply_ts, text=chunks[0])
         # Send any remaining chunks as new messages in the same thread
         if len(chunks) > 1:
+            app.client.chat_postMessage(
+                channel=channel_id, thread_ts=reply_ts, text="Remaining message: "
+            )
             for chunk in chunks[1:]:
                 app.client.chat_postMessage(
                     channel=channel_id, thread_ts=reply_ts, text=chunk
