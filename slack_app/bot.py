@@ -89,9 +89,9 @@ async def query_agent_and_reply(body, say):
             message=enriched_message,
         ):
             response_author = response.get("author")
-            logger.info("[EVENT]" + "-" * 40)
-            logger.info(response)
-            logger.info("\n\n\n")
+            # logger.info("[EVENT]" + "-" * 40)
+            # logger.info(response)
+            # logger.info("\n\n\n")
 
             if not response:
                 continue
