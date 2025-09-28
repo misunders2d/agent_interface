@@ -1,6 +1,7 @@
 from vertexai import agent_engines
 from google.adk.events import Event, EventActions
 from google.adk.sessions import VertexAiSessionService, Session
+from google.adk.artifacts import GcsArtifactService
 from google.genai import types
 
 import datetime
@@ -44,6 +45,11 @@ def get_session_service() -> VertexAiSessionService:
     location = config.GOOGLE_CLOUD_LOCATION
     session_service = VertexAiSessionService(project=project, location=location)
     return session_service
+
+
+def get_artifact_service() -> GcsArtifactService:
+    artifact_service = GcsArtifactService(bucket_name=config.GOOGLE_CLOUD_BUCKET)
+    return artifact_service
 
 
 # --- Session Management ---
@@ -95,38 +101,67 @@ async def delete_session(
     )
 
 
-async def change_state(
-    session_service: VertexAiSessionService, session_id, user_id, state_delta
+async def update_session(
+    session_service: VertexAiSessionService,
+    session_id: str,
+    user_id: str,
+    author: str = "system",
+    message: str | None = None,
+    state_delta: dict = {},
 ):
     session = await get_session(
         session_service=session_service, user_id=user_id, session_id=session_id
     )
     if session:
         actions = EventActions(state_delta=state_delta)
-        event = Event(
-            actions=actions,
-            author="system",
-            invocation_id=f"invocation_{uuid.uuid4()}",
-            id=f"id_{uuid.uuid4()}",
-        )
-        await session_service.append_event(session=session, event=event)
-
-
-async def add_messages(
-    session_service: VertexAiSessionService, session_id, user_id, author, message
-):
-    session = await get_session(
-        session_service=session_service, user_id=user_id, session_id=session_id
-    )
-    if session:
         part = types.Part(text=message)
         event = Event(
+            actions=actions,
             content=types.Content(parts=[part], role="user"),
             author=author,
             invocation_id=f"invocation_{uuid.uuid4()}",
             id=f"id_{uuid.uuid4()}",
         )
         await session_service.append_event(session=session, event=event)
+
+
+async def save_artifact(
+    artifact_service: GcsArtifactService,
+    session_id,
+    user_id,
+    filename,
+    file_content,
+    mime_type,
+):
+    part = types.Part(inline_data=types.Blob(mime_type=mime_type, data=file_content))
+    result = await artifact_service.save_artifact(
+        app_name=config.APP_NAME,
+        user_id=user_id,
+        session_id=session_id,
+        filename=filename,
+        artifact=part,
+    )
+    print(f"ARTIFACT SAVE RESULT: {result}\n\n\n")
+    return result
+
+
+async def load_artifact(
+    artifact_service: GcsArtifactService, session_id, user_id, filename
+):
+    result = await artifact_service.load_artifact(
+        app_name=config.APP_NAME,
+        user_id=user_id,
+        session_id=session_id,
+        filename=filename,
+    )
+    print(f"ARTIFACT LOAD RESULT: {result}\n\n\n")
+    return result
+
+
+def prepare_message(message: str | None = None, file_content = None, mime_type = None):
+    text_part = types.Part(text=message or '')
+    file_part = types.Part(inline_data=types.Blob(mime_type=mime_type, data=file_content))
+    return [text_part, file_part]
 
 
 async def list_messages(session_service: VertexAiSessionService, session_id, user_id):
@@ -154,50 +189,51 @@ async def run_query(user_id, session_id):
 
 
 if __name__ == "__main__":
-    import asyncio
+    # import asyncio
 
     # import pickle
     agent_app = get_remote_agent()
-    user_id = "Slack: D07LHACUY6R"
-    session_service = get_session_service()
-    session_id = "5911989909912027136"
-    # session_id = asyncio.run(
-    #     get_or_create_session(
-    #         session_service,
-    #         user_id=user_id,
+    # user_id = "Slack: D07LHACUY6R"
+    # session_service = get_session_service()
+    # session_id = "5911989909912027136"
+    # # session_id = asyncio.run(
+    # #     get_or_create_session(
+    # #         session_service,
+    # #         user_id=user_id,
+    # #     )
+    # # )
+    # # session_id = asyncio.run(create_session(session_service, user_id, session_id = None))
+    # session = asyncio.run(
+    #     get_session(
+    #         session_service=session_service, user_id=user_id, session_id=session_id
     #     )
     # )
-    # session_id = asyncio.run(create_session(session_service, user_id, session_id = None))
-    session = asyncio.run(
-        get_session(
-            session_service=session_service, user_id=user_id, session_id=session_id
-        )
-    )
-    print(session)
-    # with open('session.pkl', 'wb') as file:
-    #     pickle.dump(session, file)
     # print(session)
+    # # with open('session.pkl', 'wb') as file:
+    # #     pickle.dump(session, file)
+    # # print(session)
 
-    # asyncio.run(
-    #     add_messages(
-    #         session_service,
-    #         session_id,
-    #         user_id,
-    #         author="sergey demchenko",
-    #         message="First test message from outside of the flow",
-    #         # timestamp=datetime.datetime.now().timestamp()
-    #     )
-    # )
-    # print("Message added", end="\n\n\n")
-    # asyncio.run(
-    #     add_messages(
-    #         session_service,
-    #         session_id,
-    #         user_id,
-    #         author="Vladimir Barabulia",
-    #         message="and another test message from outside of the flow",
-    #         # timestamp=datetime.datetime.now().timestamp()
-    #     )
-    # )
-    # print("Message added", end="\n\n\n")
-    # asyncio.run(run_query(user_id, session_id))
+    # # asyncio.run(
+    # #     add_messages(
+    # #         session_service,
+    # #         session_id,
+    # #         user_id,
+    # #         author="sergey demchenko",
+    # #         message="First test message from outside of the flow",
+    # #         # timestamp=datetime.datetime.now().timestamp()
+    # #     )
+    # # )
+    # # print("Message added", end="\n\n\n")
+    # # asyncio.run(
+    # #     add_messages(
+    # #         session_service,
+    # #         session_id,
+    # #         user_id,
+    # #         author="Vladimir Barabulia",
+    # #         message="and another test message from outside of the flow",
+    # #         # timestamp=datetime.datetime.now().timestamp()
+    # #     )
+    # # )
+    # # print("Message added", end="\n\n\n")
+    # # asyncio.run(run_query(user_id, session_id))
+    get_artifact_service()
