@@ -62,7 +62,7 @@ def get_event_info(body):
     event_info["enriched_message"] = (
         f"Message from {event_info['display_name']} {event_info['user_email']} ({event_info['user_id']}): {event_info['message_text']}"
     )
-    logger.info(f"[EVENT INFO]:\n\n{event_info}\n\n\n")  # TODO remove after debugging
+    # logger.info(f"[EVENT INFO]:\n\n{event_info}\n\n\n")  # TODO remove after debugging
     return event_info
 
 
