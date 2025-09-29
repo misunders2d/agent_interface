@@ -352,12 +352,12 @@ def handle_message_events(body, say, logger):
     if "bot_id" in event or (subtype and subtype != "file_share"):
         return
 
-    if subtype == "file_share":
-        logger.info("Received file(s), processing for reply...")
-        # Note: You'll likely want to process files only when mentioned or in DMs,
-        # similar to your text logic. This example handles all file shares.
-        asyncio.run(handle_file_and_reply(body, say))
-        return
+    # if subtype == "file_share":
+    #     logger.info("Received file(s), processing for reply...")
+    #     # Note: You'll likely want to process files only when mentioned or in DMs,
+    #     # similar to your text logic. This example handles all file shares.
+    #     asyncio.run(handle_file_and_reply(body, say))
+    #     return
 
     channel_type = event.get("channel_type")
     if channel_type == "im":
