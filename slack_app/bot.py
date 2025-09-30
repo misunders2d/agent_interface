@@ -25,6 +25,7 @@ session_service = engine_modules.get_session_service()
 artifact_service = engine_modules.get_artifact_service()
 
 show_tools = False
+sessions_dict = {}
 
 
 def get_event_info(body):
@@ -70,6 +71,16 @@ async def start_agent_query(body, say):
     await query_agent_and_reply(body, say)
 
 
+async def get_session_id(user_id):
+    if user_id in sessions_dict:
+        return sessions_dict[user_id]
+    else:
+        session_id = await engine_modules.get_or_create_session(
+            session_service=session_service, user_id=user_id
+        )
+        sessions_dict[user_id] = session_id
+        return session_id
+
 async def query_agent_and_reply(body, say, event_info=None):
     """
     Queries the agent in a background thread and posts the response back to Slack.
@@ -87,9 +98,7 @@ async def query_agent_and_reply(body, say, event_info=None):
     last_text = ""
     thoughts = []
     try:
-        session_id = await engine_modules.get_or_create_session(
-            session_service=session_service, user_id=event_info["session_user_id"]
-        )
+        session_id = await get_session_id(event_info["session_user_id"])
 
         # change user_id temporarily to the message's user email for personal memories access
         await engine_modules.update_session(
@@ -231,9 +240,10 @@ async def process_message_for_context(body):
     event_info = get_event_info(body)
 
     try:
-        session_id = await engine_modules.get_or_create_session(
-            session_service=session_service, user_id=event_info["session_user_id"]
-        )
+        session_id = await get_session_id(event_info["session_user_id"])
+        # session_id = await engine_modules.get_or_create_session(
+        #     session_service=session_service, user_id=event_info["session_user_id"]
+        # )
 
         await engine_modules.update_session(
             session_service=session_service,
@@ -258,10 +268,11 @@ async def handle_file_and_reply(body, say):
     event_info["enriched_message"] += ". Files have been saved to artifact service, please check: "
     # Process each file
     files_info = []
-    session_id = await engine_modules.get_or_create_session(
-        session_service=session_service,
-        user_id=event_info["session_user_id"],
-    )
+    session_id = await get_session_id(event_info["session_user_id"])
+    # session_id = await engine_modules.get_or_create_session(
+    #     session_service=session_service,
+    #     user_id=event_info["session_user_id"],
+    # )
     if "files" in event_info["event"]:
         for file_obj in event_info["event"]["files"]:
             # The URL is private and requires an Authorization header to access
