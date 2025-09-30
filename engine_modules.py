@@ -7,6 +7,7 @@ from google.genai import types
 import datetime
 import json
 import uuid
+import base64
 from google.oauth2 import service_account
 import google.auth
 from google.auth.transport import requests as google_requests
@@ -105,24 +106,73 @@ async def update_session(
     session_service: VertexAiSessionService,
     session_id: str,
     user_id: str,
-    author: str = "system",
+    author: str = "user", # Changed default to 'user' as typically this is user input
     message: str | None = None,
+    file_list: list | None = None,
     state_delta: dict = {},
 ):
+    # Assuming get_session is a working helper function you have defined elsewhere
     session = await get_session(
         session_service=session_service, user_id=user_id, session_id=session_id
     )
-    if session:
+    parts = []
+    if message:
+        parts.append(types.Part(text=message))
+
+    if file_list:
+        for file in file_list:
+            file_content = file['content'] # This is the raw file data in bytes
+            # encoded_content = base64.b64encode(file_content).decode("utf-8")
+            mime_type = f"image/{file['mime_type']}" if file['mime_type'] in ['png', 'jpg', 'jpeg', 'gif'] else "application/octet-stream"
+            parts.append(types.Part(inline_data=types.Blob(mime_type=mime_type, data=file_content)))
+
+    if session and parts:
         actions = EventActions(state_delta=state_delta)
-        part = types.Part(text=message)
         event = Event(
             actions=actions,
-            content=types.Content(parts=[part], role="user"),
+            content=types.Content(parts=parts, role=author),
             author=author,
             invocation_id=f"invocation_{uuid.uuid4()}",
             id=f"id_{uuid.uuid4()}",
         )
         await session_service.append_event(session=session, event=event)
+    elif not parts:
+        print("No content (message or files) to append to session.")
+
+
+# async def update_session(
+#     session_service: VertexAiSessionService,
+#     session_id: str,
+#     user_id: str,
+#     author: str = "system",
+#     message: str | None = None,
+#     file_list: list | None = None,
+#     state_delta: dict = {},
+# ):
+#     session = await get_session(
+#         session_service=session_service, user_id=user_id, session_id=session_id
+#     )
+
+#     parts = []
+#     if file_list:
+#         for file in file_list:
+#             file_content = file['content'] # This is the raw file data in bytes
+#             encoded_content = base64.b64encode(file_content).decode("utf-8")
+#             mime_type = f"image/{file['mime_type']}" if file['mime_type'] in ['png', 'jpg', 'jpeg', 'gif'] else "application/octet-stream"
+#             parts.append(types.Part(inline_data = file_content))
+
+
+#     if session:
+#         actions = EventActions(state_delta=state_delta)
+#         parts.append(types.Part(text=message))
+#         event = Event(
+#             actions=actions,
+#             content=types.Content(parts=parts, role="user"),
+#             author=author,
+#             invocation_id=f"invocation_{uuid.uuid4()}",
+#             id=f"id_{uuid.uuid4()}",
+#         )
+#         await session_service.append_event(session=session, event=event)
 
 
 async def save_artifact(
@@ -158,10 +208,21 @@ async def load_artifact(
     return result
 
 
-def prepare_message(message: str | None = None, file_content = None, mime_type = None):
-    text_part = types.Part(text=message or '')
-    file_part = types.Part(inline_data=types.Blob(mime_type=mime_type, data=file_content))
-    return [text_part, file_part]
+def prepare_message_dict(event_info):
+    message = {"parts": [], "role": "user"}
+    text_part = event_info['enriched_message']
+
+    if text_part:
+        message["parts"].append({"text": text_part})
+
+    attached_files = event_info.get('files_attached', [])
+    if attached_files:
+        for file in attached_files:
+            file_content = file['content'] # This is the raw file data in bytes
+            encoded_content = base64.b64encode(file_content).decode("utf-8")
+            mime_type = f"image/{file['mime_type']}" if file['mime_type'] in ['png', 'jpg', 'jpeg', 'gif'] else "application/octet-stream"
+            message["parts"].append({"inline_data": {"data": encoded_content, "mime_type": mime_type}})
+    return message
 
 
 async def list_messages(session_service: VertexAiSessionService, session_id, user_id):

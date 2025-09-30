@@ -10,7 +10,8 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 # --- Initialization ---
 import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if os.path.dirname(os.path.dirname(os.path.abspath(__file__))) not in sys.path:
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 import engine_modules
 
@@ -28,7 +29,7 @@ show_tools = False
 sessions_dict = {}
 
 
-def get_event_info(body):
+def get_event_info(body) -> dict:
     event_info = {}
     event = body["event"]
     event_info["event"] = event
@@ -59,10 +60,49 @@ def get_event_info(body):
         event_info["user_email"] = "unknown.email@example.com"
         event_info["display_name"] = "Unknown User"
 
+    files_info = []
+
+    if "files" in event_info["event"]:
+        # logger.info(f"Downloading {len(event_info['event']['files'])} attached files...\n\n\n")
+        for file_obj in event_info["event"]["files"]:
+            # The URL is private and requires an Authorization header to access
+            url = file_obj["url_private_download"]
+            file_type = file_obj["filetype"]
+            file_name = file_obj["name"]
+
+            # logger.info(f"Downloading file: {file_name} ({file_type}) from {url}\n\n\n")
+
+            headers = {"Authorization": f"Bearer {config.SLACK_BOT_TOKEN}"}
+            try:
+
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()  # Raises an exception for bad status codes
+
+                response_content = response.content
+                files_info.append(
+                    {
+                        "name": file_name,
+                        "mime_type": file_type,
+                        "content": response_content,  # This is the raw file data in bytes
+                    }
+                )
+
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Failed to download file {file_name}: {e}")
+                app.client.chat_postMessage(
+                    channel=event_info["channel_id"],
+                    thread_ts=event_info["reply_ts"],
+                    text=f"Sorry, I couldn't download the file: {file_name}",
+                )
+                return event_info
+
     # Enrich the message with user info
     event_info["enriched_message"] = (
         f"Message from {event_info['display_name']} {event_info['user_email']} ({event_info['user_id']}): {event_info['message_text']}"
     )
+    if files_info:
+        event_info["files_attached"] = files_info
+        event_info["enriched_message"] += f"Attached files: {', '.join([f['name'] for f in files_info])}."
     # logger.info(f"[EVENT INFO]:\n\n{event_info}\n\n\n")  # TODO remove after debugging
     return event_info
 
@@ -80,6 +120,7 @@ async def get_session_id(user_id):
         )
         sessions_dict[user_id] = session_id
         return session_id
+
 
 async def query_agent_and_reply(body, say, event_info=None):
     """
@@ -108,10 +149,15 @@ async def query_agent_and_reply(body, say, event_info=None):
             state_delta={"user_id": event_info["user_email"]},
         )
 
+        prepared_message = engine_modules.prepare_message_dict(event_info)
+        
+        # logger.info(f"Prepared message file_type: {prepared_message.get('inline_data', {}).get('mime_type')}")
+        
         async for response in agent_app.async_stream_query(  # type: ignore
             user_id=event_info["session_user_id"],
             session_id=session_id,
-            message=event_info["enriched_message"],
+            # message = event_info["enriched_message"],
+            message = prepared_message
         ):
             response_author = response.get("author")
             # logger.info("[EVENT]" + "-" * 40)
@@ -238,7 +284,6 @@ async def process_message_for_context(body):
     Silently sends a message to the agent engine for context-building.
     """
     event_info = get_event_info(body)
-
     try:
         session_id = await get_session_id(event_info["session_user_id"])
         # session_id = await engine_modules.get_or_create_session(
@@ -251,6 +296,7 @@ async def process_message_for_context(body):
             user_id=event_info["session_user_id"],
             author=event_info["display_name"],
             message=event_info["enriched_message"],
+            file_list=event_info.get("files_attached", []),
         )
 
         logger.info(
@@ -258,93 +304,6 @@ async def process_message_for_context(body):
         )
     except Exception as e:
         logger.error(f"Error processing message for context: {e}")
-
-
-async def handle_file_and_reply(body, say):
-    """
-    Downloads files from a message, queries the agent, and replies.
-    """
-    event_info = get_event_info(body)
-    event_info["enriched_message"] += ". Files have been saved to artifact service, please check: "
-    # Process each file
-    files_info = []
-    session_id = await get_session_id(event_info["session_user_id"])
-    # session_id = await engine_modules.get_or_create_session(
-    #     session_service=session_service,
-    #     user_id=event_info["session_user_id"],
-    # )
-    if "files" in event_info["event"]:
-        for file_obj in event_info["event"]["files"]:
-            # The URL is private and requires an Authorization header to access
-            url = file_obj["url_private_download"]
-            file_type = file_obj["filetype"]
-            file_name = file_obj["name"]
-
-            logger.info(f"Downloading file: {file_name} ({file_type}) from {url}")
-
-            headers = {"Authorization": f"Bearer {config.SLACK_BOT_TOKEN}"}
-            try:
-
-                response = requests.get(url, headers=headers)
-                response.raise_for_status()  # Raises an exception for bad status codes
-
-                response_content = response.content
-                files_info.append(
-                    {
-                        "name": file_name,
-                        "type": file_type,
-                        "content": response_content,  # This is the raw file data in bytes
-                    }
-                )
-
-                await engine_modules.save_artifact(
-                    artifact_service=artifact_service,
-                    session_id=session_id,
-                    user_id=event_info["session_user_id"],
-                    filename=file_name,
-                    mime_type=file_type,
-                    file_content=response_content,
-                )
-                
-                event_info["enriched_message"] += f'{file_name}, '
-
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Failed to download file {file_name}: {e}")
-                app.client.chat_postMessage(
-                    channel=event_info["channel_id"],
-                    thread_ts=event_info["reply_ts"],
-                    text=f"Sorry, I couldn't download the file: {file_name}",
-                )
-                return
-
-        for file in files_info:
-            artifact_data = await engine_modules.load_artifact(
-                artifact_service=artifact_service,
-                session_id=session_id,
-                user_id=event_info["session_user_id"],
-                filename=file["name"],
-            )
-            logger.info(f"ARTIFACT DATA:\n\n\n{artifact_data}\n\n\n")
-
-    await query_agent_and_reply(body, say, event_info=event_info)
-
-    # TODO: Modify your agent call to include the `files_info` data.
-    # For example:
-    # async for response in agent_app.async_stream_query(
-    #     user_id=session_user_id,
-    #     session_id=session_id,
-    #     message=enriched_message,
-    #     attachments=files_info # <-- You'll need to adapt your agent to accept this
-    # ):
-    #    ...
-
-    # For now, let's just update the message as a confirmation
-    # final_answer = f"I've received {len(files_info)} file(s): {', '.join([f['name'] for f in files_info])}. The caption was: '{message_text}'"
-
-    # try:
-    #     app.client.chat_update(channel=channel_id, ts=reply_ts, text=final_answer)
-    # except Exception as e:
-    #     logger.error(f"Error updating final message: {e}")
 
 
 # --- Slack Event Handlers ---
@@ -374,6 +333,7 @@ def handle_message_events(body, say, logger):
     if channel_type == "im":
         logger.info("Received DM, processing for reply...")
         asyncio.run(start_agent_query(body, say))
+        # asyncio.run(process_message_for_context(body))
         return
 
     if channel_type in ["channel", "group"]:
