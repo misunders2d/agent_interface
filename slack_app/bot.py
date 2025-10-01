@@ -69,6 +69,7 @@ def get_event_info(body) -> dict:
             url = file_obj["url_private_download"]
             file_type = file_obj["filetype"]
             file_name = file_obj["name"]
+            file_size = file_obj["size"]
 
             # logger.info(f"Downloading file: {file_name} ({file_type}) from {url}\n\n\n")
 
@@ -84,6 +85,7 @@ def get_event_info(body) -> dict:
                         "name": file_name,
                         "mime_type": file_type,
                         "content": response_content,  # This is the raw file data in bytes
+                        "size": file_size,
                     }
                 )
 
@@ -102,13 +104,11 @@ def get_event_info(body) -> dict:
     )
     if files_info:
         event_info["files_attached"] = files_info
-        event_info["enriched_message"] += f"Attached files: {', '.join([f['name'] for f in files_info])}."
+        event_info[
+            "enriched_message"
+        ] += f"Attached files: {', '.join([f['name'] for f in files_info])}."
     # logger.info(f"[EVENT INFO]:\n\n{event_info}\n\n\n")  # TODO remove after debugging
     return event_info
-
-
-async def start_agent_query(body, say):
-    await query_agent_and_reply(body, say)
 
 
 async def get_session_id(user_id):
@@ -122,12 +122,11 @@ async def get_session_id(user_id):
         return session_id
 
 
-async def query_agent_and_reply(body, say, event_info=None):
+async def query_agent_and_reply(body, say):
     """
     Queries the agent in a background thread and posts the response back to Slack.
     """
-    if not event_info:
-        event_info = get_event_info(body)
+    event_info = get_event_info(body)
     try:
         initial_reply = say(text="🧠 Thinking...", thread_ts=event_info["thread_ts"])
         reply_ts = initial_reply["ts"]
@@ -149,15 +148,15 @@ async def query_agent_and_reply(body, say, event_info=None):
             state_delta={"user_id": event_info["user_email"]},
         )
 
-        prepared_message = engine_modules.prepare_message_dict(event_info)
-        
-        # logger.info(f"Prepared message file_type: {prepared_message.get('inline_data', {}).get('mime_type')}")
-        
+        prepared_message = engine_modules.prepare_message_dict(
+            text=event_info["enriched_message"],
+            file_list=event_info.get("files_attached", []),
+        )
+
         async for response in agent_app.async_stream_query(  # type: ignore
             user_id=event_info["session_user_id"],
             session_id=session_id,
-            # message = event_info["enriched_message"],
-            message = prepared_message
+            message=prepared_message,
         ):
             response_author = response.get("author")
             # logger.info("[EVENT]" + "-" * 40)
@@ -260,12 +259,10 @@ async def query_agent_and_reply(body, say, event_info=None):
     try:
         post_message = final_answer or last_text
         chunks = [post_message[i : i + 3900] for i in range(0, len(post_message), 3900)]
-        # Send the first chunk as an update to the initial reply
-        app.client.chat_update(
-            channel=event_info["channel_id"], ts=reply_ts, text=chunks[0]
-        )
-        # Send any remaining chunks as new messages in the same thread
+        first_chunk = chunks[0]
+        # Send extra chunks as new messages in the same thread
         if len(chunks) > 1:
+            first_chunk += "\n\n*(Message too long, continued in thread...)*"
             app.client.chat_postMessage(
                 channel=event_info["channel_id"],
                 thread_ts=reply_ts,
@@ -275,6 +272,10 @@ async def query_agent_and_reply(body, say, event_info=None):
                 app.client.chat_postMessage(
                     channel=event_info["channel_id"], thread_ts=reply_ts, text=chunk
                 )
+        # Send the first chunk as an update to the initial reply
+        app.client.chat_update(
+            channel=event_info["channel_id"], ts=reply_ts, text=first_chunk
+        )
     except Exception as e:
         logger.error(f"Error updating message or posting thoughts: {e}")
 
@@ -286,9 +287,6 @@ async def process_message_for_context(body):
     event_info = get_event_info(body)
     try:
         session_id = await get_session_id(event_info["session_user_id"])
-        # session_id = await engine_modules.get_or_create_session(
-        #     session_service=session_service, user_id=event_info["session_user_id"]
-        # )
 
         await engine_modules.update_session(
             session_service=session_service,
@@ -310,7 +308,7 @@ async def process_message_for_context(body):
 @app.event("app_mention")
 def handle_app_mention(body, say, ack):
     ack()
-    asyncio.run(start_agent_query(body, say))
+    asyncio.run(query_agent_and_reply(body, say))
 
 
 @app.event("message")
@@ -322,17 +320,10 @@ def handle_message_events(body, say, logger):
     if "bot_id" in event or (subtype and subtype != "file_share"):
         return
 
-    # if subtype == "file_share":
-    #     logger.info("Received file(s), processing for reply...")
-    #     # Note: You'll likely want to process files only when mentioned or in DMs,
-    #     # similar to your text logic. This example handles all file shares.
-    #     asyncio.run(handle_file_and_reply(body, say))
-    #     return
-
     channel_type = event.get("channel_type")
     if channel_type == "im":
         logger.info("Received DM, processing for reply...")
-        asyncio.run(start_agent_query(body, say))
+        asyncio.run(query_agent_and_reply(body, say))
         # asyncio.run(process_message_for_context(body))
         return
 

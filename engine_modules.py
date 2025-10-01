@@ -1,6 +1,7 @@
 from vertexai import agent_engines
 from google.adk.events import Event, EventActions
 from google.adk.sessions import VertexAiSessionService, Session
+from google.adk.memory import VertexAiMemoryBankService
 from google.adk.artifacts import GcsArtifactService
 from google.genai import types
 
@@ -34,6 +35,38 @@ credentials = get_identity_token()
 google.auth.default = lambda *args, **kwargs: (credentials, credentials.project_id)
 # vertexai.init(credentials=get_identity_token())
 
+# --- Necessary variables ---
+MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
+MIME_TYPE_MAPPING = {
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'webp': 'image/webp',
+    'flv': 'video/x-flv',
+    'mov': 'video/quicktime',
+    'mpeg': 'video/mpeg',
+    'mpegps': 'video/mpegps', # Added missing video type
+    'mpg': 'video/mpg',
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'wmv': 'video/wmv',
+    '3gpp': 'video/3gpp',
+    'aac': 'audio/aac',
+    'flac': 'audio/flac',
+    'mp3': 'audio/mp3',
+    'm4a': 'audio/m4a', # Corrected to directly reflect accepted audio/m4a type
+    'mpga': 'audio/mpga',
+    'opus': 'audio/opus',
+    'pcm': 'audio/pcm',
+    'wav': 'audio/wav',
+    'pdf': 'application/pdf',
+    'txt': 'text/plain',
+}
+SUPPORTED_MIME_TYPES = set([x for x in MIME_TYPE_MAPPING.values()])
+
+
+
+# --- Remote Agent and Services ---
 
 def get_remote_agent(resource_name=config.AGENT_ENGINE_ID):
     remote_app = agent_engines.get(resource_name)
@@ -46,6 +79,13 @@ def get_session_service() -> VertexAiSessionService:
     location = config.GOOGLE_CLOUD_LOCATION
     session_service = VertexAiSessionService(project=project, location=location)
     return session_service
+
+
+def get_memory_service() -> VertexAiMemoryBankService:
+    memory_service = VertexAiMemoryBankService(
+        project=config.GOOGLE_CLOUD_PROJECT, location=config.GOOGLE_CLOUD_LOCATION, agent_engine_id=config.AGENT_ENGINE_ID
+    )
+    return memory_service
 
 
 def get_artifact_service() -> GcsArtifactService:
@@ -106,11 +146,21 @@ async def update_session(
     session_service: VertexAiSessionService,
     session_id: str,
     user_id: str,
-    author: str = "user", # Changed default to 'user' as typically this is user input
+    author: str = "user",  # Changed default to 'user' as typically this is user input
     message: str | None = None,
     file_list: list | None = None,
     state_delta: dict = {},
 ):
+    """
+    file_list, if provided, must be a list of dicts with keys:
+    {
+        "name": file_name,
+        "mime_type": file_type,
+        "content": response_content,  # This is the raw file data in bytes
+        "size": file_size,
+    }
+    """
+    
     # Assuming get_session is a working helper function you have defined elsewhere
     session = await get_session(
         session_service=session_service, user_id=user_id, session_id=session_id
@@ -121,12 +171,27 @@ async def update_session(
 
     if file_list:
         for file in file_list:
-            file_content = file['content'] # This is the raw file data in bytes
+            file_content = file["content"]  # This is the raw file data in bytes
+            file_name = file.get('name', 'unknown_file')
+            file_size = file.get('size', len(file_content))
+            provided_file_type = file.get('mime_type')
             # encoded_content = base64.b64encode(file_content).decode("utf-8")
-            mime_type = f"image/{file['mime_type']}" if file['mime_type'] in ['png', 'jpg', 'jpeg', 'gif'] else "application/octet-stream"
-            parts.append(types.Part(inline_data=types.Blob(mime_type=mime_type, data=file_content)))
+            
+            if file_size > MAX_FILE_SIZE_BYTES:
+                print(f"Skipping file '{file_name}': Size ({file_size / (1024*1024):.2f} MB) exceeds 20 MB limit.")
+                continue
+            
+            actual_mime_type = MIME_TYPE_MAPPING.get(provided_file_type, None)
+            if actual_mime_type not in SUPPORTED_MIME_TYPES:
+                print(f"Skipping file '{file_name}': Unsupported MIME type '{provided_file_type}' (resolved to '{actual_mime_type}').")
+                continue
+            parts.append(
+                types.Part(
+                    inline_data=types.Blob(mime_type=actual_mime_type, data=file_content)
+                )
+            )
 
-    if session and parts:
+    if session:
         actions = EventActions(state_delta=state_delta)
         event = Event(
             actions=actions,
@@ -136,43 +201,6 @@ async def update_session(
             id=f"id_{uuid.uuid4()}",
         )
         await session_service.append_event(session=session, event=event)
-    elif not parts:
-        print("No content (message or files) to append to session.")
-
-
-# async def update_session(
-#     session_service: VertexAiSessionService,
-#     session_id: str,
-#     user_id: str,
-#     author: str = "system",
-#     message: str | None = None,
-#     file_list: list | None = None,
-#     state_delta: dict = {},
-# ):
-#     session = await get_session(
-#         session_service=session_service, user_id=user_id, session_id=session_id
-#     )
-
-#     parts = []
-#     if file_list:
-#         for file in file_list:
-#             file_content = file['content'] # This is the raw file data in bytes
-#             encoded_content = base64.b64encode(file_content).decode("utf-8")
-#             mime_type = f"image/{file['mime_type']}" if file['mime_type'] in ['png', 'jpg', 'jpeg', 'gif'] else "application/octet-stream"
-#             parts.append(types.Part(inline_data = file_content))
-
-
-#     if session:
-#         actions = EventActions(state_delta=state_delta)
-#         parts.append(types.Part(text=message))
-#         event = Event(
-#             actions=actions,
-#             content=types.Content(parts=parts, role="user"),
-#             author=author,
-#             invocation_id=f"invocation_{uuid.uuid4()}",
-#             id=f"id_{uuid.uuid4()}",
-#         )
-#         await session_service.append_event(session=session, event=event)
 
 
 async def save_artifact(
@@ -208,20 +236,41 @@ async def load_artifact(
     return result
 
 
-def prepare_message_dict(event_info):
+def prepare_message_dict(text: str, file_list: list | None = None) -> dict:
+    """
+    file_list, if provided, must be a list of dicts with keys:
+    {
+        "name": file_name,
+        "mime_type": file_type,
+        "content": response_content,  # This is the raw file data in bytes
+        "size": file_size,
+    }
+    """
     message = {"parts": [], "role": "user"}
-    text_part = event_info['enriched_message']
 
-    if text_part:
-        message["parts"].append({"text": text_part})
+    if text:
+        message["parts"].append({"text": text})
 
-    attached_files = event_info.get('files_attached', [])
-    if attached_files:
-        for file in attached_files:
-            file_content = file['content'] # This is the raw file data in bytes
+    if file_list:
+        for file in file_list:
+            file_content = file["content"]  # This is the raw file data in bytes
+            file_name = file.get('name', 'unknown_file')
+            file_size = file.get('size', len(file_content))
+            provided_file_type = file.get('mime_type')
             encoded_content = base64.b64encode(file_content).decode("utf-8")
-            mime_type = f"image/{file['mime_type']}" if file['mime_type'] in ['png', 'jpg', 'jpeg', 'gif'] else "application/octet-stream"
-            message["parts"].append({"inline_data": {"data": encoded_content, "mime_type": mime_type}})
+            
+            if file_size > MAX_FILE_SIZE_BYTES:
+                print(f"Skipping file '{file_name}': Size ({file_size / (1024*1024):.2f} MB) exceeds 20 MB limit.")
+                continue
+            
+            actual_mime_type = MIME_TYPE_MAPPING.get(provided_file_type, None)
+            if actual_mime_type not in SUPPORTED_MIME_TYPES:
+                print(f"Skipping file '{file_name}': Unsupported MIME type '{provided_file_type}' (resolved to '{actual_mime_type}').")
+                continue
+
+            message["parts"].append(
+                {"inline_data": {"data": encoded_content, "mime_type": actual_mime_type}}
+            )
     return message
 
 
@@ -250,6 +299,8 @@ async def run_query(user_id, session_id):
 
 
 if __name__ == "__main__":
+    memory_service = get_memory_service()
+    print(memory_service)
     # import asyncio
 
     # import pickle
@@ -297,4 +348,4 @@ if __name__ == "__main__":
     # # )
     # # print("Message added", end="\n\n\n")
     # # asyncio.run(run_query(user_id, session_id))
-    get_artifact_service()
+    # get_artifact_service()
