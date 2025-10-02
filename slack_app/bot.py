@@ -113,8 +113,10 @@ def get_event_info(body) -> dict:
 
 async def get_session_id(user_id):
     if user_id in sessions_dict:
+        logger.info(f"Using cached session ID for user {user_id}")
         return sessions_dict[user_id]
     else:
+        logger.info(f"Creating new session ID for user {user_id}")
         session_id = await engine_modules.get_or_create_session(
             session_service=session_service, user_id=user_id
         )
@@ -221,6 +223,17 @@ async def query_agent_and_reply(body, say):
                             )
                         last_text = thought
 
+                
+
+                # if artifact_delta:
+                #     filename = artifact_delta.keys()[0]
+                #     artifact = await engine_modules.load_artifact(
+                #         artifact_service=artifact_service,
+                #         session_id=session_id,
+                #         user_id=event_info["session_user_id"],
+                #         filename=filename,
+                #     )
+
             except json.JSONDecodeError as e:
                 app.client.chat_postMessage(
                     channel=event_info["channel_id"],
@@ -243,8 +256,13 @@ async def query_agent_and_reply(body, say):
         )
 
     except Exception as e:
-        final_answer = f"Sorry, an error occurred: {e}"
-        logger.error(final_answer)
+        if str(e).startswith('404 NOT_FOUND') and 'sessionId' in str(e):
+            sessions_dict.pop(event_info["session_user_id"], None)
+            logger.info("Session not found, creating a new one and retrying...")
+            await query_agent_and_reply(body, say)
+        else:
+            final_answer = f"Sorry, an error occurred: {e}"
+            logger.error(final_answer)
 
     # If there's no final answer, delete the 'Thinking...' message and stop.
     if not final_answer and not last_text:

@@ -38,35 +38,36 @@ google.auth.default = lambda *args, **kwargs: (credentials, credentials.project_
 # --- Necessary variables ---
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
 MIME_TYPE_MAPPING = {
-    'png': 'image/png',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'webp': 'image/webp',
-    'flv': 'video/x-flv',
-    'mov': 'video/quicktime',
-    'mpeg': 'video/mpeg',
-    'mpegps': 'video/mpegps', # Added missing video type
-    'mpg': 'video/mpg',
-    'mp4': 'video/mp4',
-    'webm': 'video/webm',
-    'wmv': 'video/wmv',
-    '3gpp': 'video/3gpp',
-    'aac': 'audio/aac',
-    'flac': 'audio/flac',
-    'mp3': 'audio/mp3',
-    'm4a': 'audio/m4a', # Corrected to directly reflect accepted audio/m4a type
-    'mpga': 'audio/mpga',
-    'opus': 'audio/opus',
-    'pcm': 'audio/pcm',
-    'wav': 'audio/wav',
-    'pdf': 'application/pdf',
-    'txt': 'text/plain',
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+    "flv": "video/x-flv",
+    "mov": "video/quicktime",
+    "mpeg": "video/mpeg",
+    "mpegps": "video/mpegps",  # Added missing video type
+    "mpg": "video/mpg",
+    "mp4": "video/mp4",
+    "webm": "video/webm",
+    "wmv": "video/wmv",
+    "3gpp": "video/3gpp",
+    "aac": "audio/aac",
+    "flac": "audio/flac",
+    "mp3": "audio/mp3",
+    "m4a": "audio/m4a",  # Corrected to directly reflect accepted audio/m4a type
+    "mpga": "audio/mpga",
+    "opus": "audio/opus",
+    "pcm": "audio/pcm",
+    "wav": "audio/wav",
+    "pdf": "application/pdf",
+    "txt": "text/plain",
+    "csv": "text/plain",
 }
 SUPPORTED_MIME_TYPES = set([x for x in MIME_TYPE_MAPPING.values()])
 
 
-
 # --- Remote Agent and Services ---
+
 
 def get_remote_agent(resource_name=config.AGENT_ENGINE_ID):
     remote_app = agent_engines.get(resource_name)
@@ -83,7 +84,9 @@ def get_session_service() -> VertexAiSessionService:
 
 def get_memory_service() -> VertexAiMemoryBankService:
     memory_service = VertexAiMemoryBankService(
-        project=config.GOOGLE_CLOUD_PROJECT, location=config.GOOGLE_CLOUD_LOCATION, agent_engine_id=config.AGENT_ENGINE_ID
+        project=config.GOOGLE_CLOUD_PROJECT,
+        location=config.GOOGLE_CLOUD_LOCATION,
+        agent_engine_id=config.AGENT_ENGINE_ID,
     )
     return memory_service
 
@@ -160,7 +163,7 @@ async def update_session(
         "size": file_size,
     }
     """
-    
+
     # Assuming get_session is a working helper function you have defined elsewhere
     session = await get_session(
         session_service=session_service, user_id=user_id, session_id=session_id
@@ -172,22 +175,28 @@ async def update_session(
     if file_list:
         for file in file_list:
             file_content = file["content"]  # This is the raw file data in bytes
-            file_name = file.get('name', 'unknown_file')
-            file_size = file.get('size', len(file_content))
-            provided_file_type = file.get('mime_type')
+            file_name = file.get("name", "unknown_file")
+            file_size = file.get("size", len(file_content))
+            provided_file_type = file.get("mime_type")
             # encoded_content = base64.b64encode(file_content).decode("utf-8")
-            
+
             if file_size > MAX_FILE_SIZE_BYTES:
-                print(f"Skipping file '{file_name}': Size ({file_size / (1024*1024):.2f} MB) exceeds 20 MB limit.")
+                print(
+                    f"Skipping file '{file_name}': Size ({file_size / (1024*1024):.2f} MB) exceeds 20 MB limit."
+                )
                 continue
-            
+
             actual_mime_type = MIME_TYPE_MAPPING.get(provided_file_type, None)
             if actual_mime_type not in SUPPORTED_MIME_TYPES:
-                print(f"Skipping file '{file_name}': Unsupported MIME type '{provided_file_type}' (resolved to '{actual_mime_type}').")
+                print(
+                    f"Skipping file '{file_name}': Unsupported MIME type '{provided_file_type}' (resolved to '{actual_mime_type}')."
+                )
                 continue
             parts.append(
                 types.Part(
-                    inline_data=types.Blob(mime_type=actual_mime_type, data=file_content)
+                    inline_data=types.Blob(
+                        mime_type=actual_mime_type, data=file_content
+                    )
                 )
             )
 
@@ -226,13 +235,17 @@ async def save_artifact(
 async def load_artifact(
     artifact_service: GcsArtifactService, session_id, user_id, filename
 ):
-    result = await artifact_service.load_artifact(
-        app_name=config.APP_NAME,
-        user_id=user_id,
-        session_id=session_id,
-        filename=filename,
-    )
-    print(f"ARTIFACT LOAD RESULT: {result}\n\n\n")
+    try:
+        result = await artifact_service.load_artifact(
+            app_name=config.APP_NAME,
+            user_id=user_id,
+            session_id=session_id,
+            filename=filename,
+        )
+        print(f"ARTIFACT LOAD RESULT: {result}\n\n\n")
+    except Exception as e:
+        print(f"Error loading artifact '{filename}': {e}")
+        return None
     return result
 
 
@@ -254,22 +267,31 @@ def prepare_message_dict(text: str, file_list: list | None = None) -> dict:
     if file_list:
         for file in file_list:
             file_content = file["content"]  # This is the raw file data in bytes
-            file_name = file.get('name', 'unknown_file')
-            file_size = file.get('size', len(file_content))
-            provided_file_type = file.get('mime_type')
+            file_name = file.get("name", "unknown_file")
+            file_size = file.get("size", len(file_content))
+            provided_file_type = file.get("mime_type")
             encoded_content = base64.b64encode(file_content).decode("utf-8")
-            
+
             if file_size > MAX_FILE_SIZE_BYTES:
-                print(f"Skipping file '{file_name}': Size ({file_size / (1024*1024):.2f} MB) exceeds 20 MB limit.")
+                print(
+                    f"Skipping file '{file_name}': Size ({file_size / (1024*1024):.2f} MB) exceeds 20 MB limit."
+                )
                 continue
-            
+
             actual_mime_type = MIME_TYPE_MAPPING.get(provided_file_type, None)
             if actual_mime_type not in SUPPORTED_MIME_TYPES:
-                print(f"Skipping file '{file_name}': Unsupported MIME type '{provided_file_type}' (resolved to '{actual_mime_type}').")
+                print(
+                    f"Skipping file '{file_name}': Unsupported MIME type '{provided_file_type}' (resolved to '{actual_mime_type}')."
+                )
                 continue
 
             message["parts"].append(
-                {"inline_data": {"data": encoded_content, "mime_type": actual_mime_type}}
+                {
+                    "inline_data": {
+                        "data": encoded_content,
+                        "mime_type": actual_mime_type,
+                    }
+                }
             )
     return message
 
