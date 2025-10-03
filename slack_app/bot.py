@@ -139,6 +139,7 @@ async def query_agent_and_reply(body, say):
     final_answer = ""
     last_text = ""
     thoughts = []
+    session_id = None
     try:
         session_id = await get_session_id(event_info["session_user_id"])
 
@@ -256,8 +257,9 @@ async def query_agent_and_reply(body, say):
         )
 
     except Exception as e:
-        if str(e).startswith('404 NOT_FOUND') and 'sessionId' in str(e):
+        if str(e).startswith('404 NOT_FOUND') and 'sessionId' in str(e) and session_id:
             sessions_dict.pop(event_info["session_user_id"], None)
+            await engine_modules.delete_session(session_service=session_service, user_id=event_info["session_user_id"], session_id= session_id)
             logger.info("Session not found, creating a new one and retrying...")
             await query_agent_and_reply(body, say)
         else:
@@ -323,6 +325,25 @@ async def process_message_for_context(body):
 
 
 # --- Slack Event Handlers ---
+@app.command("/delete_session")
+async def handle_delete_session(ack, body, say):
+    await ack()
+    channel_id = body["channel_id"]
+    session_user_id = f"Slack: {channel_id}"
+    try:
+        session_id = await get_session_id(session_user_id)
+        await engine_modules.delete_session(
+            session_service=session_service,
+            user_id=session_user_id,
+            session_id=session_id,
+        )
+        sessions_dict.pop(session_user_id, None)
+        say("🗑️ Deleted session for this channel.")
+    except Exception as e:
+        error_msg = f"Error deleting session: {e}"
+        logger.error(error_msg)
+        say(f"❌ {error_msg}")
+
 @app.event("app_mention")
 def handle_app_mention(body, say, ack):
     ack()
