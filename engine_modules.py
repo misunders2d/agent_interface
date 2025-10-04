@@ -137,11 +137,6 @@ async def get_or_create_session(
     return await create_session(session_service, user_id, session_id)
 
 
-async def save_session(memory_service: VertexAiMemoryBankService, session: Session):
-    if session:
-        await memory_service.add_session_to_memory(session=session)
-
-
 async def delete_session(
     session_service: VertexAiSessionService, user_id: str, session_id: str
 ):

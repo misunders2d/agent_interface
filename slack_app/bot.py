@@ -368,10 +368,7 @@ def handle_save_session(ack, body, say):
 
     if session:
         try:
-            asyncio.run(engine_modules.save_session(
-                session=session,
-                memory_service=memory_service,
-            ))
+            asyncio.run(memory_service.add_session_to_memory(session))
             say("💾 Saved session for this channel.")
         except Exception as e:
             error_msg = f"Error saving session: {e}"
