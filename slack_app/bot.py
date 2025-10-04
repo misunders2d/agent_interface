@@ -24,6 +24,7 @@ app = App(token=config.SLACK_BOT_TOKEN, signing_secret=config.SLACK_SIGNING_SECR
 agent_app = engine_modules.get_remote_agent()
 session_service = engine_modules.get_session_service()
 artifact_service = engine_modules.get_artifact_service()
+memory_service = engine_modules.get_memory_service()
 
 show_tools = False
 sessions_dict = {}
@@ -116,7 +117,7 @@ async def get_session_id(user_id):
         logger.info(f"Using cached session ID for user {user_id}")
         return sessions_dict[user_id]
     else:
-        logger.info(f"Creating new session ID for user {user_id}")
+        logger.info(f"Creating / fetching new session ID for user {user_id}")
         session_id = await engine_modules.get_or_create_session(
             session_service=session_service, user_id=user_id
         )
@@ -332,8 +333,9 @@ def handle_delete_session(ack, body, say):
     ack()
     channel_id = body["channel_id"]
     session_user_id = f"Slack: {channel_id}"
+    session_id = asyncio.run(get_session_id(session_user_id))
+
     try:
-        session_id = asyncio.run(get_session_id(session_user_id))
         asyncio.run(
             engine_modules.delete_session(
                 session_service=session_service,
@@ -347,6 +349,34 @@ def handle_delete_session(ack, body, say):
         error_msg = f"Error deleting session: {e}"
         logger.error(error_msg)
         say(f"❌ {error_msg}")
+
+
+@app.command("/save_session")
+def handle_save_session(ack, body, say):
+    ack()
+    channel_id = body["channel_id"]
+    session_user_id = f"Slack: {channel_id}"
+    session_id = asyncio.run(get_session_id(session_user_id))
+
+    session = asyncio.run(
+        engine_modules.get_session(
+            session_service=session_service,
+            user_id=session_user_id,
+            session_id=session_id,
+        )
+    )
+
+    if session:
+        try:
+            engine_modules.save_session(
+                session=session,
+                memory_service=memory_service,
+            )
+            say("💾 Saved session for this channel.")
+        except Exception as e:
+            error_msg = f"Error saving session: {e}"
+            logger.error(error_msg)
+            say(f"❌ {error_msg}")
 
 
 @app.event("app_mention")

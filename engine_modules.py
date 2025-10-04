@@ -84,9 +84,9 @@ def get_session_service() -> VertexAiSessionService:
 
 def get_memory_service() -> VertexAiMemoryBankService:
     memory_service = VertexAiMemoryBankService(
-        project=config.GOOGLE_CLOUD_PROJECT,
-        location=config.GOOGLE_CLOUD_LOCATION,
-        agent_engine_id=config.AGENT_ENGINE_ID,
+        # project=config.GOOGLE_CLOUD_PROJECT,
+        # location=config.GOOGLE_CLOUD_LOCATION,
+        agent_engine_id=config.AGENT_ENGINE_ID  # .split('/')[-1],
     )
     return memory_service
 
@@ -135,6 +135,15 @@ async def get_or_create_session(
     if sessions:
         return sessions[-1].id
     return await create_session(session_service, user_id, session_id)
+
+
+def save_session(memory_service: VertexAiMemoryBankService, session: Session):
+    if session:
+        r = memory_service.add_session_to_memory(session=session)
+        try:
+            r.close()
+        except Exception as e:
+            return e
 
 
 async def delete_session(
@@ -321,12 +330,32 @@ async def run_query(user_id, session_id):
 
 
 if __name__ == "__main__":
-    memory_service = get_memory_service()
-    print(memory_service)
-    # import asyncio
+    import asyncio
+
+    agent_app = get_remote_agent()
+    session_service = get_session_service()
+
+    print("[SAVE SESSION]")
+    print("created memory service...")
+    session = asyncio.run(
+        get_session(
+            session_service=session_service,
+            session_id="1133754268155641856",
+            user_id="Slack: D07LHACUY6R",
+        )
+    )
+    if session:
+        memory_service = get_memory_service()
+        session_service = get_session_service()
+        print(f"Received session, id: {session.id}, user: {session.user_id}")
+        print("Saving session using memory service")
+        result = memory_service.add_session_to_memory(session=session)
+        print(f"Saved session: {result}")
+
+    # result = asyncio.run(save_session(session_service, memory_service, session_id='1133754268155641856', user_id='Slack: D07LHACUY6R'))
+    # print(result)
 
     # import pickle
-    agent_app = get_remote_agent()
     # user_id = "Slack: D07LHACUY6R"
     # session_service = get_session_service()
     # session_id = "5911989909912027136"
