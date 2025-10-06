@@ -39,6 +39,17 @@ def get_event_info(body) -> dict:
     event_info["channel_id"] = event["channel"]
     # Only reply in a thread if the original message was in a thread
     event_info["thread_ts"] = event.get("thread_ts")
+    # Get message permalink
+    try:
+        permalink_resp = app.client.chat_getPermalink(
+            channel=event_info["channel_id"],
+            message_ts=event_info["event"]["ts"],
+        )
+        event_info['message_link'] = permalink_resp.get("permalink")
+    except Exception as e:
+        logger.error(f"Error fetching message permalink: {e}")
+        event_info['message_link'] = None
+
     # Fetch channel display name
     try:
         channel_info = app.client.conversations_info(channel=event_info["channel_id"])
@@ -282,22 +293,19 @@ async def query_agent_and_reply(body, say):
     try:
         post_message = final_answer or last_text
         chunks = [post_message[i : i + 3900] for i in range(0, len(post_message), 3900)]
-        first_chunk = chunks[0]
         # Send extra chunks as new messages in the same thread
-        if len(chunks) > 1:
-            first_chunk += "\n\n*(Message too long, continued in thread...)*"
+        app.client.chat_postMessage(
+            channel=event_info["channel_id"],
+            thread_ts=reply_ts,
+            text="⬇️⬇️⬇️Final message:",
+        )
+        for chunk in chunks:
             app.client.chat_postMessage(
-                channel=event_info["channel_id"],
-                thread_ts=reply_ts,
-                text="Remaining message: ",
+                channel=event_info["channel_id"], thread_ts=reply_ts, text=chunk
             )
-            for chunk in chunks[1:]:
-                app.client.chat_postMessage(
-                    channel=event_info["channel_id"], thread_ts=reply_ts, text=chunk
-                )
         # Send the first chunk as an update to the initial reply
         app.client.chat_update(
-            channel=event_info["channel_id"], ts=reply_ts, text=first_chunk
+            channel=event_info["channel_id"], ts=reply_ts, text=":white_check_mark: Check my reply in thread. Ping me there if you need to continue conversation..."
         )
     except Exception as e:
         logger.error(f"Error updating message or posting thoughts: {e}")
