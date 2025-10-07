@@ -6,3 +6,4 @@ python-dotenv
 requests
 slack-bolt
 streamlit
+python-telegram-bot>=20.0
