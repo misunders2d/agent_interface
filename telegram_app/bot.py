@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import sys
+
 # import asyncio
 from typing import Any, Dict, List
 
@@ -41,7 +42,9 @@ TELEGRAM_TOKEN = config.TELEGRAM_BOT_TOKEN
 
 
 # --- Helper Functions ---
-async def download_files_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> List[Dict[str, Any]]:
+async def download_files_from_update(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> List[Dict[str, Any]]:
     """Download files (documents and photos) from a Telegram update."""
     files_info: List[Dict[str, Any]] = []
     message = update.effective_message
@@ -92,7 +95,9 @@ async def get_session_id(user_id):
         return session_id
 
 
-async def get_event_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Dict[str, Any]:
+async def get_event_info(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> Dict[str, Any]:
     """Extracts and structures event information from a Telegram update."""
     message = update.effective_message
     chat = update.effective_chat
@@ -122,10 +127,14 @@ async def get_event_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     files_info = await download_files_from_update(update, context)
 
     # Enrich the message
-    enriched_message =f"Message from {display_name} ({user_id}): {event_info['message_text']}"
+    enriched_message = (
+        f"Message from {display_name} ({user_id}): {event_info['message_text']}"
+    )
     if files_info:
         event_info["files_attached"] = files_info
-        enriched_message +=f" Attached files: {', '.join([f['name'] for f in files_info])}."
+        enriched_message += (
+            f" Attached files: {', '.join([f['name'] for f in files_info])}."
+        )
 
     event_info["enriched_message"] = enriched_message
 
@@ -159,7 +168,7 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
             session_service=session_service,
             session_id=session_id,
             user_id=event_info["session_user_id"],
-            state_delta={"user_id": event_info["personal_user_id"]},
+            state_delta={"user_id": f'Telegram: {event_info["user_id"]}'},
         )
 
         prepared_message = engine_modules.prepare_message_dict(
@@ -167,7 +176,7 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
             file_list=event_info.get("files_attached", []),
         )
 
-        async for response in agent_app.async_stream_query( # type: ignore
+        async for response in agent_app.async_stream_query(  # type: ignore
             user_id=event_info["session_user_id"],
             session_id=session_id,
             message=prepared_message,
@@ -178,16 +187,24 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
             response_author = response.get("author")
 
             try:
+
                 if response_author == "answer_validator_agent":
                     continue
 
                 parts = response.get("content", {}).get("parts", [])
                 for part in parts:
+
+                    await context.bot.send_chat_action(
+                        chat_id=update.effective_chat.id, action=ChatAction.TYPING
+                    )
+
                     if part.get("text") and not part.get("thought"):
                         final_answer += part.get("text")
 
                     elif part.get("text") and part.get("thought"):
-                        thought = f"🧠 *Thought* ({response_author}): {part.get('text')}"
+                        thought = (
+                            f"🧠 *Thought* ({response_author}): {part.get('text')}"
+                        )
                         thoughts.append(thought)
                         if show_tools:
                             await update.effective_message.reply_text(thought)
@@ -250,9 +267,7 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         post_message = final_answer or last_text
         # Telegram max message length is 4096
-        chunks = [
-            post_message[i : i + 4096] for i in range(0, len(post_message), 4096)
-        ]
+        chunks = [post_message[i : i + 4096] for i in range(0, len(post_message), 4096)]
         for chunk in chunks:
             await update.effective_message.reply_text(chunk)
 
@@ -313,7 +328,9 @@ async def delete_session_command(update: Update, context: ContextTypes.DEFAULT_T
                 session_id=session_id,
             )
             sessions_dict.pop(session_user_id, None)
-            await update.effective_message.reply_text("🗑️ Deleted session for this chat.")
+            await update.effective_message.reply_text(
+                "🗑️ Deleted session for this chat."
+            )
         except Exception as e:
             error_msg = f"Error deleting session: {e}"
             logger.error(error_msg)
@@ -347,7 +364,9 @@ async def save_session_command(update: Update, context: ContextTypes.DEFAULT_TYP
                     "💾 Saved session for this chat. It's now safe to delete the session using `/delete_session` command"
                 )
             else:
-                await update.effective_message.reply_text("Could not find session to save.")
+                await update.effective_message.reply_text(
+                    "Could not find session to save."
+                )
         except Exception as e:
             error_msg = f"Error saving session: {e}"
             logger.error(error_msg)
@@ -359,7 +378,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles incoming messages and routes them."""
     message = update.effective_message
     chat = update.effective_chat
-    
 
     if not message or not chat:
         return
@@ -367,7 +385,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Ignore messages from bots
     if message.from_user and message.from_user.is_bot:
         return
-    
+
     bot = await context.bot.get_me()
 
     # Route based on chat type

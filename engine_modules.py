@@ -178,6 +178,8 @@ async def update_session(
             file_name = file.get("name", "unknown_file")
             file_size = file.get("size", len(file_content))
             provided_file_type = file.get("mime_type")
+            if provided_file_type and "/" in provided_file_type:
+                provided_file_type = provided_file_type.split("/")[-1]
             # encoded_content = base64.b64encode(file_content).decode("utf-8")
 
             if file_size > MAX_FILE_SIZE_BYTES:
@@ -270,6 +272,8 @@ def prepare_message_dict(text: str, file_list: list | None = None) -> dict:
             file_name = file.get("name", "unknown_file")
             file_size = file.get("size", len(file_content))
             provided_file_type = file.get("mime_type")
+            if provided_file_type and "/" in provided_file_type:
+                provided_file_type = provided_file_type.split("/")[-1]
             encoded_content = base64.b64encode(file_content).decode("utf-8")
 
             if file_size > MAX_FILE_SIZE_BYTES:
