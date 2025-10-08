@@ -13,7 +13,11 @@ SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN", "")
 # TELEGRAM_BOT_TOKEN is required to run the Telegram bot.
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 # Use webhook if you want to run behind HTTPS endpoint. Default: polling.
-TELEGRAM_USE_WEBHOOK = os.getenv("TELEGRAM_USE_WEBHOOK", "false").lower() in ["1", "true", "yes"]
+TELEGRAM_USE_WEBHOOK = os.getenv("TELEGRAM_USE_WEBHOOK", "false").lower() in [
+    "1",
+    "true",
+    "yes",
+]
 TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL", "")
 TELEGRAM_WEBHOOK_PORT = int(os.getenv("TELEGRAM_WEBHOOK_PORT", "8443"))
 

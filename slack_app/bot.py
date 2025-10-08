@@ -46,10 +46,10 @@ def get_event_info(body) -> dict:
             channel=event_info["channel_id"],
             message_ts=event_info["event"]["ts"],
         )
-        event_info['message_link'] = permalink_resp.get("permalink")
+        event_info["message_link"] = permalink_resp.get("permalink")
     except Exception as e:
         logger.error(f"Error fetching message permalink: {e}")
-        event_info['message_link'] = None
+        event_info["message_link"] = None
 
     # Fetch channel display name
     try:
@@ -303,7 +303,9 @@ async def query_agent_and_reply(body, say):
         if len(chunks) > 1:
             for chunk in chunks[1:]:
                 app.client.chat_postMessage(
-                    channel=event_info["channel_id"], thread_ts=event_info["thread_ts"], text=chunk
+                    channel=event_info["channel_id"],
+                    thread_ts=event_info["thread_ts"],
+                    text=chunk,
                 )
         # Send the first chunk as an update to the initial reply
         # app.client.chat_update(
@@ -384,7 +386,9 @@ def handle_save_session(ack, body, say):
     if session:
         try:
             asyncio.run(memory_service.add_session_to_memory(session))
-            say("💾 Saved session for this channel. It's now safe to delete the session using `/delete_session` command")
+            say(
+                "💾 Saved session for this channel. It's now safe to delete the session using `/delete_session` command"
+            )
         except Exception as e:
             error_msg = f"Error saving session: {e}"
             logger.error(error_msg)

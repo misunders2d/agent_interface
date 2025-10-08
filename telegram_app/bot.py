@@ -393,13 +393,17 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("Received private message, processing for reply...")
         await query_agent_and_reply(update, context)
 
-    elif chat.type in ["group", "supergroup"]:
-        # In groups, reply only on mention. Otherwise, process for context.
-        if message.text and f"@{bot.username}" in message.text:
+    elif chat.type in ["group", "supergroup", "channel"]:
+        # In groups, reply only on mention. In channels, always process for context.
+        if (
+            message.text
+            and f"@{bot.username}" in message.text
+            and chat.type != "channel"
+        ):
             logger.info("Received group mention, processing for reply...")
             await query_agent_and_reply(update, context)
         else:
-            logger.info("Received group message, processing for context...")
+            logger.info(f"Received {chat.type} message, processing for context...")
             await process_message_for_context(update, context)
 
 
@@ -417,7 +421,14 @@ def main():
     app.add_handler(CommandHandler("save_session", save_session_command))
 
     # Message handler for all text and file messages
-    app.add_handler(MessageHandler(filters.TEXT | filters.ATTACHMENT, message_handler))
+    app.add_handler(
+        MessageHandler(
+            (filters.UpdateType.MESSAGE | filters.UpdateType.CHANNEL_POST)
+            & (filters.TEXT | filters.ATTACHMENT)
+            & ~filters.COMMAND,
+            message_handler,
+        )
+    )
 
     logger.info("🤖 Telegram bot is running (polling)...")
     app.run_polling()
