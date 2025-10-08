@@ -37,8 +37,9 @@ def get_event_info(body) -> dict:
     event_info["user_id"] = event["user"]
     event_info["message_text"] = event["text"]
     event_info["channel_id"] = event["channel"]
-    # Only reply in a thread if the original message was in a thread
-    event_info["thread_ts"] = event.get("thread_ts")
+    # Reply in a thread. If the original message is already in a thread, use that thread's ts.
+    # Otherwise, use the message's ts to start a new thread.
+    event_info["thread_ts"] = event.get("thread_ts") or event.get("ts")
     # Get message permalink
     try:
         permalink_resp = app.client.chat_getPermalink(
@@ -105,7 +106,7 @@ def get_event_info(body) -> dict:
                 logger.error(f"Failed to download file {file_name}: {e}")
                 app.client.chat_postMessage(
                     channel=event_info["channel_id"],
-                    thread_ts=event_info["reply_ts"],
+                    thread_ts=event_info["thread_ts"],
                     text=f"Sorry, I couldn't download the file: {file_name}",
                 )
                 return event_info
@@ -207,7 +208,7 @@ async def query_agent_and_reply(body, say):
                         thoughts.append(thought)
                         app.client.chat_postMessage(
                             channel=event_info["channel_id"],
-                            thread_ts=reply_ts,
+                            thread_ts=event_info["thread_ts"],
                             text=thought,
                         )
                         last_text = thought
@@ -219,7 +220,7 @@ async def query_agent_and_reply(body, say):
                         if show_tools:
                             app.client.chat_postMessage(
                                 channel=event_info["channel_id"],
-                                thread_ts=reply_ts,
+                                thread_ts=event_info["thread_ts"],
                                 text=thought,
                             )
                         last_text = thought
@@ -231,7 +232,7 @@ async def query_agent_and_reply(body, say):
                         if show_tools:
                             app.client.chat_postMessage(
                                 channel=event_info["channel_id"],
-                                thread_ts=reply_ts,
+                                thread_ts=event_info["thread_ts"],
                                 text=thought,
                             )
                         last_text = thought
@@ -248,13 +249,13 @@ async def query_agent_and_reply(body, say):
             except json.JSONDecodeError as e:
                 app.client.chat_postMessage(
                     channel=event_info["channel_id"],
-                    thread_ts=reply_ts,
+                    thread_ts=event_info["thread_ts"],
                     text=f"ERROR: Ran into JSON decoding issue: {str(e)}",
                 )
             except Exception as e:
                 app.client.chat_postMessage(
                     channel=event_info["channel_id"],
-                    thread_ts=reply_ts,
+                    thread_ts=event_info["thread_ts"],
                     text=f"ERROR: Ran into an unexpected issue: {str(e)}",
                 )
 
@@ -296,17 +297,23 @@ async def query_agent_and_reply(body, say):
         # Send extra chunks as new messages in the same thread
         app.client.chat_postMessage(
             channel=event_info["channel_id"],
-            thread_ts=reply_ts,
-            text="⬇️⬇️⬇️Final message:",
+            thread_ts=event_info["thread_ts"],
+            text=f"⬇️⬇️⬇️Final message:\n{chunks[0]}",
         )
-        for chunk in chunks:
-            app.client.chat_postMessage(
-                channel=event_info["channel_id"], thread_ts=reply_ts, text=chunk
-            )
+        if len(chunks) > 1:
+            for chunk in chunks[1:]:
+                app.client.chat_postMessage(
+                    channel=event_info["channel_id"], thread_ts=event_info["thread_ts"], text=chunk
+                )
         # Send the first chunk as an update to the initial reply
-        app.client.chat_update(
-            channel=event_info["channel_id"], ts=reply_ts, text=":white_check_mark: Check my reply in thread. Ping me there if you need to continue conversation..."
-        )
+        # app.client.chat_update(
+        #     channel=event_info["channel_id"], ts=reply_ts, text=":white_check_mark: Check my reply in thread. Ping me there if you need to continue conversation..."
+        # )
+        try:
+            app.client.chat_delete(channel=event_info["channel_id"], ts=reply_ts)
+        except Exception as e:
+            logger.error(f"Error deleting 'Thinking...' message: {e}")
+
     except Exception as e:
         logger.error(f"Error updating message or posting thoughts: {e}")
 
