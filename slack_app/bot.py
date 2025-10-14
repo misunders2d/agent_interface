@@ -417,7 +417,11 @@ def handle_message_events(body, say, logger):
     subtype = event.get("subtype")
 
     # Ignore app mentions in channels and groups, let the app_mention handler do the work
-    if event.get("channel_type") in ["channel", "group"] and bot_user_id and f"<@{bot_user_id}>" in event.get("text", ""):
+    if (
+        event.get("channel_type") in ["channel", "group"]
+        and bot_user_id
+        and f"<@{bot_user_id}>" in event.get("text", "")
+    ):
         return
 
     # Ignore messages from bots, and subtypes other than file shares

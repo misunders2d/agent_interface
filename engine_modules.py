@@ -1,4 +1,4 @@
-from vertexai import agent_engines
+from vertexai import agent_engines, init as vertexai_init
 from google.adk.events import Event, EventActions
 from google.adk.sessions import VertexAiSessionService, Session
 from google.adk.memory import VertexAiMemoryBankService
@@ -16,8 +16,8 @@ import config
 
 
 # --- Auth ---
-def get_identity_token():
-    """Get identity token from the GCP service account string."""
+def get_credentials():
+    """Get credentials object from the GCP service account string."""
     if not config.GCP_SERVICE_ACCOUNT_STRING:
         raise ValueError("GCP_SERVICE_ACCOUNT environment variable not set.")
     service_info = json.loads(config.GCP_SERVICE_ACCOUNT_STRING)
@@ -25,15 +25,26 @@ def get_identity_token():
         service_info,
         scopes=["https://www.googleapis.com/auth/cloud-platform"],
     )
-
     auth_req = google_requests.Request()
     credentials.refresh(auth_req)
     return credentials
 
 
-credentials = get_identity_token()
+# --- Initialization ---
+# Get credentials from the service account
+credentials = get_credentials()
+
+# Monkey-patch google.auth.default to use our credentials. This is necessary
+# because some underlying libraries (like google-cloud-storage) do not seem to
+# correctly pick up credentials passed to the ADK services.
 google.auth.default = lambda *args, **kwargs: (credentials, credentials.project_id)
-# vertexai.init(credentials=get_identity_token())
+
+# Initialize the Vertex AI SDK globally
+vertexai_init(
+    credentials=credentials,
+    project=config.GOOGLE_CLOUD_PROJECT,
+    location=config.GOOGLE_CLOUD_LOCATION,
+)
 
 # --- Necessary variables ---
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
@@ -42,23 +53,6 @@ MIME_TYPE_MAPPING = {
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
     "webp": "image/webp",
-    # "flv": "video/x-flv",
-    # "mov": "video/quicktime",
-    # "mpeg": "video/mpeg",
-    # "mpegps": "video/mpegps",  # Added missing video type
-    # "mpg": "video/mpg",
-    # "mp4": "video/mp4",
-    # "webm": "video/webm",
-    # "wmv": "video/wmv",
-    # "3gpp": "video/3gpp",
-    # "aac": "audio/aac",
-    # "flac": "audio/flac",
-    # "mp3": "audio/mp3",
-    # "m4a": "audio/m4a",  # Corrected to directly reflect accepted audio/m4a type
-    # "mpga": "audio/mpga",
-    # "opus": "audio/opus",
-    # "pcm": "audio/pcm",
-    # "wav": "audio/wav",
     "pdf": "application/pdf",
     "txt": "text/plain",
     "csv": "text/plain",
@@ -68,32 +62,32 @@ SUPPORTED_MIME_TYPES = set([x for x in MIME_TYPE_MAPPING.values()])
 
 # --- Remote Agent and Services ---
 
-
 def get_remote_agent(resource_name=config.AGENT_ENGINE_ID):
+    """Gets the remote agent engine, relying on the global SDK initialization."""
     remote_app = agent_engines.get(resource_name)
-    remote_app.credentials = get_identity_token()
     return remote_app
 
 
 def get_session_service() -> VertexAiSessionService:
-    project = config.GOOGLE_CLOUD_PROJECT
-    location = config.GOOGLE_CLOUD_LOCATION
-    session_service = VertexAiSessionService(project=project, location=location)
-    return session_service
+    """Initializes the session service with explicit credentials."""
+    return VertexAiSessionService(
+        project=config.GOOGLE_CLOUD_PROJECT,
+        location=config.GOOGLE_CLOUD_LOCATION,
+    )
 
 
 def get_memory_service() -> VertexAiMemoryBankService:
-    memory_service = VertexAiMemoryBankService(
-        # project=config.GOOGLE_CLOUD_PROJECT,
-        # location=config.GOOGLE_CLOUD_LOCATION,
-        agent_engine_id=config.AGENT_ENGINE_ID  # .split('/')[-1],
+    """Initializes the memory service with explicit credentials."""
+    return VertexAiMemoryBankService(
+        agent_engine_id=config.AGENT_ENGINE_ID,
     )
-    return memory_service
 
 
 def get_artifact_service() -> GcsArtifactService:
-    artifact_service = GcsArtifactService(bucket_name=config.GOOGLE_CLOUD_BUCKET)
-    return artifact_service
+    """Initializes the artifact service with explicit credentials."""
+    return GcsArtifactService(
+        bucket_name=config.GOOGLE_CLOUD_BUCKET, credentials=credentials
+    )
 
 
 # --- Session Management ---
@@ -180,7 +174,6 @@ async def update_session(
             provided_file_type = file.get("mime_type")
             if provided_file_type and "/" in provided_file_type:
                 provided_file_type = provided_file_type.split("/")[-1]
-            # encoded_content = base64.b64encode(file_content).decode("utf-8")
 
             if file_size > MAX_FILE_SIZE_BYTES:
                 print(
@@ -329,69 +322,5 @@ if __name__ == "__main__":
 
     agent_app = get_remote_agent()
     session_service = get_session_service()
-
-    print("[SAVE SESSION]")
-    print("created memory service...")
-    session = asyncio.run(
-        get_session(
-            session_service=session_service,
-            session_id="1133754268155641856",
-            user_id="Slack: D07LHACUY6R",
-        )
-    )
-    if session:
-        memory_service = get_memory_service()
-        session_service = get_session_service()
-        print(f"Received session, id: {session.id}, user: {session.user_id}")
-        print("Saving session using memory service")
-        result = memory_service.add_session_to_memory(session=session)
-        print(f"Saved session: {result}")
-
-    # result = asyncio.run(save_session(session_service, memory_service, session_id='1133754268155641856', user_id='Slack: D07LHACUY6R'))
-    # print(result)
-
-    # import pickle
-    # user_id = "Slack: D07LHACUY6R"
-    # session_service = get_session_service()
-    # session_id = "5911989909912027136"
-    # # session_id = asyncio.run(
-    # #     get_or_create_session(
-    # #         session_service,
-    # #         user_id=user_id,
-    # #     )
-    # # )
-    # # session_id = asyncio.run(create_session(session_service, user_id, session_id = None))
-    # session = asyncio.run(
-    #     get_session(
-    #         session_service=session_service, user_id=user_id, session_id=session_id
-    #     )
-    # )
-    # print(session)
-    # # with open('session.pkl', 'wb') as file:
-    # #     pickle.dump(session, file)
-    # # print(session)
-
-    # # asyncio.run(
-    # #     add_messages(
-    # #         session_service,
-    # #         session_id,
-    # #         user_id,
-    # #         author="sergey demchenko",
-    # #         message="First test message from outside of the flow",
-    # #         # timestamp=datetime.datetime.now().timestamp()
-    # #     )
-    # # )
-    # # print("Message added", end="\n\n\n")
-    # # asyncio.run(
-    # #     add_messages(
-    # #         session_service,
-    # #         session_id,
-    # #         user_id,
-    # #         author="Vladimir Barabulia",
-    # #         message="and another test message from outside of the flow",
-    # #         # timestamp=datetime.datetime.now().timestamp()
-    # #     )
-    # # )
-    # # print("Message added", end="\n\n\n")
-    # # asyncio.run(run_query(user_id, session_id))
-    # get_artifact_service()
+    session_id = asyncio.run(list_sessions(session_service=session_service, user_id="sergey@mellanni.com"))
+    print(session_id)

@@ -2,7 +2,9 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+project_root = os.path.dirname(os.path.abspath(__file__))
+dotenv_path = os.path.join(project_root, ".env")
+load_dotenv(dotenv_path=dotenv_path, override=True)
 
 # --- Slack ---
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
@@ -32,7 +34,8 @@ AGENT_ENGINE_ID = os.getenv("AGENT_ENGINE_ID", "")
 APP_NAME = os.getenv("APP_NAME", "")
 
 ENDPOINT = (
-    f"https://us-central1-aiplatform.googleapis.com/v1/{AGENT_ENGINE_ID}"
+    f"https://{GOOGLE_CLOUD_LOCATION}-aiplatform.googleapis.com/v1/{AGENT_ENGINE_ID}"
     if AGENT_ENGINE_ID
     else None
 )
+

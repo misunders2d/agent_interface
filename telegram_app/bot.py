@@ -16,12 +16,17 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+import config
+import engine_modules
+# Suppress absl warnings
+from absl import logging as absl_logging
+
+absl_logging.set_verbosity(absl_logging.ERROR)
+
 
 # --- Initialization ---
 if os.path.dirname(os.path.dirname(os.path.abspath(__file__))) not in sys.path:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import config
-import engine_modules
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
