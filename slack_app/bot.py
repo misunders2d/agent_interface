@@ -21,6 +21,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = App(token=config.SLACK_BOT_TOKEN, signing_secret=config.SLACK_SIGNING_SECRET)
+
+# --- Fetch bot user ID at startup ---
+bot_user_id = None
+try:
+    auth_test_response = app.client.auth_test()
+    bot_user_id = auth_test_response["user_id"]
+    logger.info(f"Bot User ID: {bot_user_id}")
+except Exception as e:
+    logger.error(f"Error fetching bot user ID: {e}")
+
 agent_app = engine_modules.get_remote_agent()
 session_service = engine_modules.get_session_service()
 artifact_service = engine_modules.get_artifact_service()
@@ -406,6 +416,10 @@ def handle_message_events(body, say, logger):
     event = body["event"]
     subtype = event.get("subtype")
 
+    # Ignore app mentions in channels and groups, let the app_mention handler do the work
+    if event.get("channel_type") in ["channel", "group"] and bot_user_id and f"<@{bot_user_id}>" in event.get("text", ""):
+        return
+
     # Ignore messages from bots, and subtypes other than file shares
     if "bot_id" in event or (subtype and subtype != "file_share"):
         return
@@ -414,7 +428,6 @@ def handle_message_events(body, say, logger):
     if channel_type == "im":
         logger.info("Received DM, processing for reply...")
         asyncio.run(query_agent_and_reply(body, say))
-        # asyncio.run(process_message_for_context(body))
         return
 
     if channel_type in ["channel", "group"]:
