@@ -59,6 +59,7 @@ SUPPORTED_MIME_TYPES = set([x for x in MIME_TYPE_MAPPING.values()])
 
 # --- Remote Agent and Services ---
 
+
 def get_remote_agent(resource_name=config.AGENT_ENGINE_ID):
     """Gets the remote agent engine, relying on the global SDK initialization."""
     remote_app = agent_engines.get(resource_name)
@@ -76,7 +77,7 @@ def get_session_service() -> VertexAiSessionService:
 def get_memory_service() -> VertexAiMemoryBankService:
     """Initializes the memory service with explicit credentials."""
     return VertexAiMemoryBankService(
-        agent_engine_id=config.AGENT_ENGINE_ID.split('/')[-1],
+        agent_engine_id=config.AGENT_ENGINE_ID.split("/")[-1],
         project=credentials.project_id,
     )
 
@@ -320,5 +321,7 @@ if __name__ == "__main__":
 
     agent_app = get_remote_agent()
     session_service = get_session_service()
-    session_id = asyncio.run(list_sessions(session_service=session_service, user_id="sergey@mellanni.com"))
+    session_id = asyncio.run(
+        list_sessions(session_service=session_service, user_id="sergey@mellanni.com")
+    )
     print(session_id)

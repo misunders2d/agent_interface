@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import sys
+
 # --- Initialization ---
 if os.path.dirname(os.path.dirname(os.path.abspath(__file__))) not in sys.path:
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,12 +22,11 @@ from telegram.ext import (
     filters,
 )
 import engine_modules
+
 # Suppress absl warnings
 from absl import logging as absl_logging
 
 absl_logging.set_verbosity(absl_logging.ERROR)
-
-
 
 
 logging.basicConfig(
