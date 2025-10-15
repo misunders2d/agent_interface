@@ -34,9 +34,6 @@ def get_credentials():
 # Get credentials from the service account
 credentials = get_credentials()
 
-# Monkey-patch google.auth.default to use our credentials. This is necessary
-# because some underlying libraries (like google-cloud-storage) do not seem to
-# correctly pick up credentials passed to the ADK services.
 google.auth.default = lambda *args, **kwargs: (credentials, credentials.project_id)
 
 # Initialize the Vertex AI SDK globally
@@ -79,7 +76,8 @@ def get_session_service() -> VertexAiSessionService:
 def get_memory_service() -> VertexAiMemoryBankService:
     """Initializes the memory service with explicit credentials."""
     return VertexAiMemoryBankService(
-        agent_engine_id=config.AGENT_ENGINE_ID,
+        agent_engine_id=config.AGENT_ENGINE_ID.split('/')[-1],
+        project=credentials.project_id,
     )
 
 
