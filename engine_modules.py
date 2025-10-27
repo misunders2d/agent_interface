@@ -3,6 +3,7 @@ from google.adk.events import Event, EventActions
 from google.adk.sessions import VertexAiSessionService, Session
 from google.adk.memory import VertexAiMemoryBankService
 from google.adk.artifacts import GcsArtifactService
+from google.adk.tools.tool_confirmation import ToolConfirmation
 from google.genai import types
 
 import datetime
@@ -314,6 +315,42 @@ async def run_query(user_id, session_id):
         message="""List all messages here including this one. Don't use memory agents, don't list agent messages. Don't overthink this or pass to any agents, I'm simply testing whether you can see the context and history.""",
     ):
         print(event)
+
+
+async def send_tool_confirmation(
+    session_service: VertexAiSessionService,
+    session_id: str,
+    user_id: str,
+    confirmation: bool,
+    call_id: str,
+):
+    session = await get_session(
+        session_service=session_service, session_id=session_id, user_id=user_id
+    )
+    if not session:
+        return
+    # confirmed = ToolConfirmation(confirmed=confirmation)
+    func_response = types.FunctionResponse(
+        id=call_id, name="adk_request_confirmation", response={"confirmed": True}
+    )
+    parts = [types.Part(function_response=func_response)]
+
+    event = Event(
+        content=types.Content(parts=parts, role="user"),
+        author="user",
+        invocation_id=f"invocation_{uuid.uuid4()}",
+        id=f"id_{uuid.uuid4()}",
+    )
+
+    # event = Event(
+    #     author="user",
+    #     actions=EventActions(
+    #         requested_tool_confirmations= {call_id:confirmed}
+    #         ),
+    #     invocation_id=f"invocation_{uuid.uuid4()}",
+    #     id=f"id_{uuid.uuid4()}",
+    # )
+    await session_service.append_event(session=session, event=event)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from telegram.constants import ChatAction
 from telegram.ext import (
     # Application,
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -25,6 +26,7 @@ import engine_modules
 
 # Suppress absl warnings
 from absl import logging as absl_logging
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 absl_logging.set_verbosity(absl_logging.ERROR)
 
@@ -190,12 +192,48 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
             if not response:
                 continue
 
+            logger.info("[EVENT LOGGING]:]")
+            logger.info(response)
+            logger.info("\n\n\n")
+
             response_author = response.get("author")
 
             try:
 
                 if response_author == "answer_validator_agent":
                     continue
+
+                # if confirmation_request := response.get("actions", {}).get(
+                #     "requested_tool_confirmations"
+                # ):
+                #     call_id = list(confirmation_request.keys())[0]
+                #     logger.info(f"[SENDING TOOL CONFIRMATION] for call_id: {call_id}")
+                #     logger.info("\n\n\n")
+                # Send inline Yes / No buttons to ask the user to confirm the tool call
+                # keyboard = [
+                #     [
+                #         InlineKeyboardButton("Yes", callback_data=f"tool_confirm:{call_id}:yes"),
+                #         InlineKeyboardButton("No", callback_data=f"tool_confirm:{call_id}:no"),
+                #     ]
+                # ]
+                # reply_markup = InlineKeyboardMarkup(keyboard)
+                # logger.info("[REPLY MARKUP]:")
+                # logger.info("\n\n\n")
+
+                # await update.effective_message.reply_text(
+                #     "⚠️ The agent requests to run a tool. Confirm?",
+                #     reply_markup=reply_markup,
+                # )
+
+                # Don't auto-confirm; wait for user's button press
+                # await engine_modules.send_tool_confirmation(
+                #     session_service=session_service,
+                #     session_id=session_id,
+                #     user_id=event_info["session_user_id"],
+                #     confirmation=True,
+                #     call_id=call_id,
+                #     )
+                # break
 
                 parts = response.get("content", {}).get("parts", [])
                 for part in parts:
@@ -223,6 +261,13 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
                         if show_tools:
                             await update.effective_message.reply_text(thought)
                         last_text = thought
+
+                        # get tool confirmation
+                        if fc.get("args", {}).get("toolConfirmation"):
+                            logger.info(
+                                f"[SENDING TOOL CONFIRMATION] for call_id: {fc.get('id')}"
+                            )
+                            logger.info("\n\n\n")
 
                     elif part.get("function_response"):
                         fr = part.get("function_response")
@@ -309,6 +354,39 @@ async def process_message_for_context(
         logger.info(f"Processed message for context in chat {event_info['chat_id']}")
     except Exception as e:
         logger.error(f"Error processing message for context: {e}")
+
+
+# --- Button Callback Handler ---
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Parses the CallbackQuery and updates the tool confirmation."""
+    event_info = await get_event_info(update, context)
+    session_id = await get_session_id(event_info["session_user_id"])
+    user_id = event_info["session_user_id"]
+    query = update.callback_query
+    if query and query.data and query.message:
+        await query.answer()  # Acknowledge the button press
+
+        # Data is in the format "tool_confirm:<call_id>:<action>"
+        data = query.data
+        _, call_id, action = data.split(":")
+
+        confirmation = True if action == "yes" else False
+
+        try:
+            await engine_modules.send_tool_confirmation(
+                session_service=session_service,
+                session_id=session_id,
+                user_id=user_id,
+                confirmation=confirmation,
+                call_id=call_id,
+            )
+            # Let the user know the confirmation was sent.
+            await query.edit_message_text(
+                text=f"✅ Confirmation '{action.capitalize()}' sent. The agent will continue."
+            )
+        except Exception as e:
+            logger.error(f"Error sending tool confirmation: {e}")
+            await query.edit_message_text(text=f"❌ Error sending confirmation: {e}")
 
 
 # --- Command Handlers ---
@@ -425,6 +503,9 @@ def main():
     # Command handlers
     app.add_handler(CommandHandler("delete_session", delete_session_command))
     app.add_handler(CommandHandler("save_session", save_session_command))
+
+    # Callback query handler for buttons
+    app.add_handler(CallbackQueryHandler(button_handler, pattern=r"^tool_confirm:"))
 
     # Message handler for all text and file messages
     app.add_handler(

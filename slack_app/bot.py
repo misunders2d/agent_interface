@@ -37,6 +37,7 @@ artifact_service = engine_modules.get_artifact_service()
 memory_service = engine_modules.get_memory_service()
 
 show_tools = False
+show_thoughts = False
 sessions_dict = {}
 
 
@@ -216,11 +217,12 @@ async def query_agent_and_reply(body, say):
                             f"🧠 *Thought* ({response_author}): {part.get('text')}"
                         )
                         thoughts.append(thought)
-                        app.client.chat_postMessage(
-                            channel=event_info["channel_id"],
-                            thread_ts=event_info["thread_ts"],
-                            text=thought,
-                        )
+                        if show_thoughts:
+                            app.client.chat_postMessage(
+                                channel=event_info["channel_id"],
+                                thread_ts=event_info["thread_ts"],
+                                text=thought,
+                            )
                         last_text = thought
 
                     elif part.get("function_call"):
