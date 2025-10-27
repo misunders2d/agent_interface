@@ -3,7 +3,7 @@ from google.adk.events import Event, EventActions
 from google.adk.sessions import VertexAiSessionService, Session
 from google.adk.memory import VertexAiMemoryBankService
 from google.adk.artifacts import GcsArtifactService
-from google.adk.tools.tool_confirmation import ToolConfirmation
+# from google.adk.tools.tool_confirmation import ToolConfirmation
 from google.genai import types
 
 import datetime
@@ -323,6 +323,7 @@ async def send_tool_confirmation(
     user_id: str,
     confirmation: bool,
     call_id: str,
+    invocation_id: str
 ):
     session = await get_session(
         session_service=session_service, session_id=session_id, user_id=user_id

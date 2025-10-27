@@ -16,7 +16,7 @@ from telegram.constants import ChatAction
 from telegram.ext import (
     # Application,
     ApplicationBuilder,
-    CallbackQueryHandler,
+    # CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -26,7 +26,7 @@ import engine_modules
 
 # Suppress absl warnings
 from absl import logging as absl_logging
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+# from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 absl_logging.set_verbosity(absl_logging.ERROR)
 
@@ -43,6 +43,7 @@ memory_service = engine_modules.get_memory_service()
 
 
 show_tools = False
+show_thoughts = False
 sessions_dict = {}
 
 # --- Constants ---
@@ -192,9 +193,12 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
             if not response:
                 continue
 
-            logger.info("[EVENT LOGGING]:]")
-            logger.info(response)
-            logger.info("\n\n\n")
+            # logger.info(
+            #     "******************[EVENT LOGGING]******************************:"
+            # )
+            # logger.info(response)
+            # logger.info(f"RESPONSE TYPE: {type(response)}")
+            # logger.info("\n\n\n")
 
             response_author = response.get("author")
 
@@ -238,9 +242,14 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
                 parts = response.get("content", {}).get("parts", [])
                 for part in parts:
 
-                    await context.bot.send_chat_action(
+                    send_typing = context.bot.send_chat_action(
                         chat_id=update.effective_chat.id, action=ChatAction.TYPING
                     )
+
+                    # logger.info("%%%%%%%%%%%%%%%[PART]%%%%%%%%%%%%%%%%%")
+                    # logger.info(part)
+                    # logger.info(f"Part type: {type(part)}")
+                    # logger.info("\n\n\n")
 
                     if part.get("text") and not part.get("thought"):
                         final_answer += part.get("text")
@@ -250,7 +259,7 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
                             f"🧠 *Thought* ({response_author}): {part.get('text')}"
                         )
                         thoughts.append(thought)
-                        if show_tools:
+                        if show_thoughts:
                             await update.effective_message.reply_text(thought)
                         last_text = thought
 
@@ -261,13 +270,28 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
                         if show_tools:
                             await update.effective_message.reply_text(thought)
                         last_text = thought
+                        # logger.info(f"[FUNCTION CALL] for call_id: {fc.get('id')}")
+                        # logger.info(
+                        #     f"############################################################\n\n\n"
+                        # )
 
                         # get tool confirmation
-                        if fc.get("args", {}).get("toolConfirmation"):
-                            logger.info(
-                                f"[SENDING TOOL CONFIRMATION] for call_id: {fc.get('id')}"
-                            )
-                            logger.info("\n\n\n")
+                        # if response.get('finish_reason'):
+                        #     logger.info(
+                        #         f"[SENDING TOOL CONFIRMATION] for call_id: {fc.get('id')}"
+                        #     )
+                        #     logger.info("\n\n\n")
+                        #     await engine_modules.send_tool_confirmation(
+                        #         session_service=session_service,
+                        #         session_id=session_id,
+                        #         user_id=event_info["session_user_id"],
+                        #         confirmation=True,
+                        #         call_id=fc.get("id"),
+                        #         invocation_id=response.get('invocation_id')
+                        #     )
+                        #     logger.info(
+                        #         f"[TOOL CONFIRMATION SENT] for call_id: {fc.get('id')}"
+                        #     )
 
                     elif part.get("function_response"):
                         fr = part.get("function_response")
@@ -276,6 +300,8 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
                         if show_tools:
                             await update.effective_message.reply_text(thought)
                         last_text = thought
+
+                    await send_typing
 
             except json.JSONDecodeError as e:
                 await update.effective_message.reply_text(
@@ -316,11 +342,14 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     try:
-        post_message = final_answer or last_text
+        # post_message = final_answer or last_text
         # Telegram max message length is 4096
-        chunks = [post_message[i : i + 4096] for i in range(0, len(post_message), 4096)]
-        for chunk in chunks:
-            await update.effective_message.reply_text(chunk)
+        if final_answer:
+            chunks = [
+                final_answer[i : i + 4096] for i in range(0, len(final_answer), 4096)
+            ]
+            for chunk in chunks:
+                await update.effective_message.reply_text(chunk)
 
     except Exception as e:
         logger.error(f"Error posting final answer: {e}")
@@ -356,37 +385,38 @@ async def process_message_for_context(
         logger.error(f"Error processing message for context: {e}")
 
 
-# --- Button Callback Handler ---
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Parses the CallbackQuery and updates the tool confirmation."""
-    event_info = await get_event_info(update, context)
-    session_id = await get_session_id(event_info["session_user_id"])
-    user_id = event_info["session_user_id"]
-    query = update.callback_query
-    if query and query.data and query.message:
-        await query.answer()  # Acknowledge the button press
+# # --- Button Callback Handler ---
+# async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+#     """Parses the CallbackQuery and updates the tool confirmation."""
+#     event_info = await get_event_info(update, context)
+#     session_id = await get_session_id(event_info["session_user_id"])
+#     user_id = event_info["session_user_id"]
+#     query = update.callback_query
+#     if query and query.data and query.message:
+#         await query.answer()  # Acknowledge the button press
 
-        # Data is in the format "tool_confirm:<call_id>:<action>"
-        data = query.data
-        _, call_id, action = data.split(":")
+#         # Data is in the format "tool_confirm:<call_id>:<action>"
+#         data = query.data
+#         _, call_id, action = data.split(":")
 
-        confirmation = True if action == "yes" else False
+#         confirmation = True if action == "yes" else False
 
-        try:
-            await engine_modules.send_tool_confirmation(
-                session_service=session_service,
-                session_id=session_id,
-                user_id=user_id,
-                confirmation=confirmation,
-                call_id=call_id,
-            )
-            # Let the user know the confirmation was sent.
-            await query.edit_message_text(
-                text=f"✅ Confirmation '{action.capitalize()}' sent. The agent will continue."
-            )
-        except Exception as e:
-            logger.error(f"Error sending tool confirmation: {e}")
-            await query.edit_message_text(text=f"❌ Error sending confirmation: {e}")
+#         try:
+#             await engine_modules.send_tool_confirmation(
+#                 session_service=session_service,
+#                 session_id=session_id,
+#                 user_id=user_id,
+#                 confirmation=confirmation,
+#                 call_id=call_id,
+#                 invocation_id = invocation_id
+#             )
+#             # Let the user know the confirmation was sent.
+#             await query.edit_message_text(
+#                 text=f"✅ Confirmation '{action.capitalize()}' sent. The agent will continue."
+#             )
+#         except Exception as e:
+#             logger.error(f"Error sending tool confirmation: {e}")
+#             await query.edit_message_text(text=f"❌ Error sending confirmation: {e}")
 
 
 # --- Command Handlers ---
@@ -504,8 +534,8 @@ def main():
     app.add_handler(CommandHandler("delete_session", delete_session_command))
     app.add_handler(CommandHandler("save_session", save_session_command))
 
-    # Callback query handler for buttons
-    app.add_handler(CallbackQueryHandler(button_handler, pattern=r"^tool_confirm:"))
+    # # Callback query handler for buttons
+    # app.add_handler(CallbackQueryHandler(button_handler, pattern=r"^tool_confirm:"))
 
     # Message handler for all text and file messages
     app.add_handler(
