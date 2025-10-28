@@ -294,7 +294,7 @@ async def query_agent_and_reply(body, say):
             logger.error(final_answer)
 
     # If there's no final answer, delete the 'Thinking...' message and stop.
-    if not final_answer and not last_text:
+    if not final_answer:
         logger.info("Agent provided no final answer. Deleting 'Thinking...' message.")
         try:
             app.client.chat_delete(channel=event_info["channel_id"], ts=reply_ts)
@@ -304,8 +304,7 @@ async def query_agent_and_reply(body, say):
 
     # Otherwise, update the message with the final answer and post thoughts.
     try:
-        post_message = final_answer or last_text
-        chunks = [post_message[i : i + 3900] for i in range(0, len(post_message), 3900)]
+        chunks = [final_answer[i : i + 3900] for i in range(0, len(final_answer), 3900)]
         # Send extra chunks as new messages in the same thread
         app.client.chat_postMessage(
             channel=event_info["channel_id"],
