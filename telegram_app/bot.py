@@ -451,6 +451,28 @@ async def delete_session_command(update: Update, context: ContextTypes.DEFAULT_T
             await update.effective_message.reply_text(f"❌ {error_msg}")
 
 
+async def create_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat:
+        return
+    chat_id = str(update.effective_chat.id)
+    session_user_id = f"Telegram: {chat_id}"
+
+    if update.effective_message:
+        try:
+            new_session_id = await engine_modules.create_session(
+                session_service=session_service,
+                user_id=session_user_id,
+            )
+            sessions_dict[session_user_id] = new_session_id
+            await update.effective_message.reply_text(
+                f"Created a new session for this chat with id {new_session_id}."
+            )
+        except Exception as e:
+            error_msg = f"Error creating session: {e}"
+            logger.error(error_msg)
+            await update.effective_message.reply_text(f"❌ {error_msg}")
+
+
 async def save_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_chat:
         return
@@ -533,6 +555,7 @@ def main():
     # Command handlers
     app.add_handler(CommandHandler("delete_session", delete_session_command))
     app.add_handler(CommandHandler("save_session", save_session_command))
+    app.add_handler(CommandHandler("create_session", create_session_command))
 
     # # Callback query handler for buttons
     # app.add_handler(CallbackQueryHandler(button_handler, pattern=r"^tool_confirm:"))
