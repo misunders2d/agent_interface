@@ -325,11 +325,14 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         if str(e).startswith("404 NOT_FOUND") and "sessionId" in str(e) and session_id:
             sessions_dict.pop(event_info["session_user_id"], None)
-            await engine_modules.delete_session(
-                session_service=session_service,
-                user_id=event_info["session_user_id"],
-                session_id=session_id,
-            )
+            try:
+                await engine_modules.delete_session(
+                    session_service=session_service,
+                    user_id=event_info["session_user_id"],
+                    session_id=session_id,
+                )
+            except Exception as delete_e:
+                logger.error(f"Error deleting invalid session: {delete_e}")
             logger.info("Session not found, creating a new one and retrying...")
             await query_agent_and_reply(update, context)  # Recurse
             return  # Important to exit after recursion
