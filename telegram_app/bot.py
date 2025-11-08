@@ -173,7 +173,6 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
         session_id = await get_session_id(event_info["session_user_id"])
 
         # Temporarily change user_id for personal memories access
-        print(f"Setting state user_id to {event_info['user_id']}", end = "\n\n\n")
         await engine_modules.update_session(
             session_service=session_service,
             session_id=session_id,
