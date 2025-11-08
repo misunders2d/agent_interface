@@ -177,7 +177,7 @@ async def query_agent_and_reply(update: Update, context: ContextTypes.DEFAULT_TY
             session_service=session_service,
             session_id=session_id,
             user_id=event_info["session_user_id"],
-            state_delta={"user_id": event_info["user_id"]},
+            state_delta={"user_id": f'Telegram: {event_info["user_id"]}'},
         )
 
         prepared_message = engine_modules.prepare_message_dict(
