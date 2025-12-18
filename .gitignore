@@ -219,3 +219,4 @@ improvements.md
 .streamlit/
 
 vertex_storage_credentials.json
+*.db

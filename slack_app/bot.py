@@ -356,6 +356,18 @@ async def process_message_for_context(body):
         )
     except Exception as e:
         logger.error(f"Error processing message for context: {e}")
+        if str(e).startswith("404 NOT_FOUND") and "sessionId" in str(e) and session_id:
+            sessions_dict.pop(event_info["session_user_id"], None)
+            try:
+                await engine_modules.delete_session(
+                    session_service=session_service,
+                    user_id=event_info["session_user_id"],
+                    session_id=session_id,
+                )
+            except Exception as delete_e:
+                logger.error(f"Error deleting invalid session: {delete_e}")
+            logger.info("Session not found, creating a new one and retrying...")
+            await process_message_for_context(body)
 
 
 # --- Slack Event Handlers ---
